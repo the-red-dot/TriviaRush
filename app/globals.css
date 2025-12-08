@@ -1,26 +1,809 @@
-@import "tailwindcss";
-
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+    --primary: #7000ff;
+    --secondary: #00f0ff;
+    --success: #00ff9d;
+    --danger: #ff0055;
+    --warning: #ffcc00;
+    --shop: #ff00cc;
+    --bg-dark: #0a0a12;
+    --bg-card: #161625;
+    --text-main: #ffffff;
+    --text-muted: #a0a0b0;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* --- THEMES (ערכות נושא) --- */
+body.theme-matrix {
+    --primary: #00ff00;
+    --secondary: #008f11;
+    --text-main: #00ff00;
+    --bg-card: #001100;
+    background-color: #000;
+    background-image: linear-gradient(0deg, transparent 24%, rgba(0, 255, 0, .3) 25%, rgba(0, 255, 0, .3) 26%, transparent 27%, transparent 74%, rgba(0, 255, 0, .3) 75%, rgba(0, 255, 0, .3) 76%, transparent 77%, transparent), linear-gradient(90deg, transparent 24%, rgba(0, 255, 0, .3) 25%, rgba(0, 255, 0, .3) 26%, transparent 27%, transparent 74%, rgba(0, 255, 0, .3) 75%, rgba(0, 255, 0, .3) 76%, transparent 77%, transparent);
+    background-size: 50px 50px;
+    font-family: 'Courier New', monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+body.theme-retro {
+    --primary: #ff0055;
+    --secondary: #ffee00;
+    --bg-card: #220022;
+    background: repeating-linear-gradient(45deg, #2b1120, #2b1120 10px, #1a0a13 10px, #1a0a13 20px);
+    font-family: 'Rubik Glitch', sans-serif;
+}
+
+body.theme-gold {
+    --primary: #ffd700;
+    --secondary: #ffaa00;
+    --text-main: #ffebb3;
+    --bg-card: #1a1200;
+    background-image: radial-gradient(circle, #443300 0%, #000000 100%);
+}
+
+/* --- GOLDEN NAME EFFECT (שם הזהב) --- */
+.golden-name {
+    background: linear-gradient(to right, #BF953F, #FCF6BA, #B38728, #FBF5B7, #AA771C);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent !important;
+    text-shadow: 0 0 10px rgba(255, 215, 0, 0.8);
+    font-weight: 800;
+    letter-spacing: 1px;
+    animation: shine 3s infinite linear;
+    background-size: 200%;
+}
+
+@keyframes shine {
+    0% { background-position: 0% center; }
+    100% { background-position: 200% center; }
+}
+
+/* --- FRAMES (מסגרות פרופיל) --- */
+.leaderboard-item.profile-frame {
+    margin: 5px 0;
+    border-radius: 8px;
+    position: relative;
+    z-index: 1;
+}
+
+.leaderboard-item.frame-gold {
+    border: 2px solid #ffd700 !important;
+    box-shadow: 0 0 15px rgba(255, 215, 0, 0.4), inset 0 0 10px rgba(255, 215, 0, 0.1);
+    background: linear-gradient(90deg, rgba(255, 215, 0, 0.05), transparent);
+}
+
+.leaderboard-item.frame-neon {
+    border: 2px solid #00f0ff !important;
+    box-shadow: 0 0 15px rgba(0, 240, 255, 0.4), inset 0 0 10px rgba(0, 240, 255, 0.1);
+    background: linear-gradient(90deg, rgba(0, 240, 255, 0.05), transparent);
+}
+
+/* --- CUSTOM SCROLLBAR (עיצוב סרגל גלילה משופר) --- */
+/* תמיכה ב-Firefox */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: var(--primary) transparent;
+}
+
+/* תמיכה ב-Chrome, Edge, Safari */
+::-webkit-scrollbar {
+    width: 12px; /* מעט רחב יותר כדי לתת מקום לריווח */
+}
+
+::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.1); /* רקע כמעט שקוף */
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+    background-color: var(--primary); /* צבע הגולל */
+    border-radius: 20px; /* פינות עגולות לגמרי */
+    border: 3px solid transparent; /* הטריק: גבול שקוף שיוצר את המרווח */
+    background-clip: content-box; /* גורם לרקע להופיע רק בתוכן ולא בגבול */
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background-color: var(--secondary);
+}
+
+/* --- אנימציות כלליות --- */
+@keyframes pulse-glow {
+    0% { text-shadow: 0 0 10px var(--primary); transform: scale(1); }
+    50% { text-shadow: 0 0 25px var(--secondary), 0 0 10px white; transform: scale(1.02); }
+    100% { text-shadow: 0 0 10px var(--primary); transform: scale(1); }
+}
+
+@keyframes float-up {
+    0% { transform: translateY(0) scale(1); opacity: 1; }
+    100% { transform: translateY(-50px) scale(1.2); opacity: 0; }
+}
+
+@keyframes float-center {
+    0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
+    20% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
+    80% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+    100% { transform: translate(-50%, -80%) scale(1.5); opacity: 0; }
+}
+
+@keyframes slideIn {
+    from { transform: translateY(50px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes popIn {
+    0% { transform: scale(0); opacity: 0; }
+    80% { transform: scale(1.1); opacity: 1; }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+/* רכיבי UI כלליים */
+* {
+    box-sizing: border-box;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+}
+
+html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+    font-family: 'Heebo', sans-serif;
+    background-color: var(--bg-dark);
+    color: var(--text-main);
+    overflow: hidden;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background-image: radial-gradient(circle at 50% 50%, #1a1a2e 0%, #000000 100%);
+    transition: background 0.5s, color 0.5s; 
+}
+
+.screen {
+    display: none;
+    width: 100%;
+    max-width: 600px;
+    height: 100%;
+    flex-direction: column;
+    padding: 20px;
+    position: relative;
+    z-index: 10;
+}
+
+.screen.active {
+    display: flex;
+}
+
+.btn {
+    background: linear-gradient(135deg, var(--primary), #4c00b0);
+    color: white;
+    border: none;
+    padding: 15px 30px;
+    font-size: 1.2rem;
+    border-radius: 12px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: all 0.2s;
+    box-shadow: 0 4px 15px rgba(112, 0, 255, 0.4);
+    margin: 10px 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    position: relative;
+    overflow: hidden;
+}
+
+.btn:active {
+    transform: scale(0.95);
+}
+
+.btn:disabled {
+    filter: grayscale(1);
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn-outline {
+    background: transparent;
+    border: 2px solid var(--secondary);
+    color: var(--secondary);
+    box-shadow: 0 0 10px rgba(0, 240, 255, 0.1);
+}
+
+.btn-shop {
+    background: linear-gradient(135deg, #ff00cc, #990066);
+    box-shadow: 0 4px 15px rgba(255, 0, 204, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.name-input {
+    background: rgba(255, 255, 255, 0.1);
+    border: 2px solid var(--primary);
+    color: white;
+    padding: 15px;
+    font-size: 1.2rem;
+    border-radius: 12px;
+    margin-bottom: 20px;
+    width: 80%;
+    text-align: center;
+    font-family: 'Heebo', sans-serif;
+    outline: none;
+    transition: all 0.3s;
+}
+
+.name-input:focus {
+    box-shadow: 0 0 15px var(--primary);
+    border-color: var(--secondary);
+}
+
+/* סגנונות נושאים מותאמים אישית */
+.custom-topics-container {
+    width: 80%;
+    margin-bottom: 10px;
+}
+
+.input-group {
+    display: flex;
+    width: 100%;
+    align-items: stretch;
+}
+
+.topics-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+    justify-content: center;
+    min-height: 30px;
+}
+
+.topic-tag {
+    background: rgba(112, 0, 255, 0.3);
+    border: 1px solid var(--primary);
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    animation: popIn 0.3s ease-out;
+}
+
+.topic-remove {
+    cursor: pointer;
+    color: var(--danger);
+    font-weight: bold;
+}
+
+.topic-remove:hover {
+    color: #ff5577;
+}
+
+/* מתג גוגל */
+.google-toggle-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 20px;
+    gap: 10px;
+    background: rgba(255,255,255,0.05);
+    padding: 10px;
+    border-radius: 30px;
+    width: fit-content;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 50px;
+    height: 24px;
+}
+
+.switch input { opacity: 0; width: 0; height: 0; }
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-color: #ccc;
+    transition: .4s;
+    border-radius: 34px;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 16px;
+    width: 16px;
+    left: 4px;
+    bottom: 4px;
+    background-color: white;
+    transition: .4s;
+    border-radius: 50%;
+}
+
+input:checked + .slider { background-color: #4285F4; } 
+input:checked + .slider:before { transform: translateX(26px); }
+
+/* רשימת מקורות במסך טעינה */
+#sources-list {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin-top: 15px;
+    max-height: 150px;
+    overflow-y: auto;
+    width: 90%;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.source-item {
+    background: rgba(66, 133, 244, 0.2);
+    border-left: 3px solid #4285F4;
+    padding: 8px;
+    font-size: 0.8rem;
+    text-align: right;
+    border-radius: 4px;
+    animation: slideIn 0.3s ease-out;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* מסך פתיחה */
+#menu-screen {
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+}
+
+.game-title {
+    font-family: 'Rubik Glitch', sans-serif;
+    font-size: 4rem;
+    color: var(--secondary);
+    text-shadow: 0 0 20px var(--primary);
+    margin-bottom: 10px;
+    animation: pulse-glow 2s ease-in-out infinite alternate;
+    line-height: 1;
+}
+
+.subtitle {
+    font-size: 1.2rem;
+    color: var(--text-muted);
+    margin-bottom: 40px;
+}
+
+/* מסך משחק */
+#game-screen {
+    justify-content: space-between;
+}
+
+.hud {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(22, 22, 37, 0.9);
+    padding: 10px 15px;
+    border-radius: 15px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    margin-bottom: 10px;
+}
+
+.stat-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+}
+
+.stat-label { font-size: 0.7rem; color: var(--text-muted); }
+.stat-value { font-size: 1.2rem; font-weight: bold; font-family: monospace; }
+
+.timer-container {
+    width: 100%;
+    height: 8px;
+    background: #333;
+    border-radius: 5px;
+    margin-top: 5px;
+    overflow: hidden;
+    position: relative;
+}
+
+.timer-bar {
+    height: 100%;
+    background: var(--success);
+    width: 100%;
+    transition: width 0.1s linear, background-color 0.3s;
+}
+
+.timer-bar.danger { background: var(--danger); animation: pulse-red 0.5s infinite; }
+
+.progress-text {
+    text-align: center;
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+}
+
+.question-card {
+    background: var(--bg-card);
+    padding: 20px;
+    border-radius: 20px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    margin-bottom: 10px;
+    position: relative;
+    border: 1px solid rgba(112, 0, 255, 0.2);
+    animation: slideIn 0.5s ease-out;
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.question-text {
+    font-size: 1.3rem;
+    font-weight: bold;
+    text-align: center;
+    margin-bottom: 20px;
+    line-height: 1.3;
+}
+
+.options-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.option-btn {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 15px;
+    border-radius: 10px;
+    color: white;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: right;
+    position: relative;
+}
+
+.option-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: var(--primary);
+}
+
+.option-btn.correct {
+    background: rgba(0, 255, 157, 0.2);
+    border-color: var(--success);
+    color: var(--success);
+}
+
+.option-btn.wrong {
+    background: rgba(255, 0, 85, 0.2);
+    border-color: var(--danger);
+    color: var(--danger);
+}
+
+.bottom-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 10px;
+    gap: 10px;
+}
+
+.lifelines {
+    display: flex;
+    justify-content: flex-start;
+    gap: 10px;
+}
+
+.lifeline-btn {
+    background: #2a2a3d;
+    border: none;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+}
+
+.lifeline-btn:hover:not(:disabled) { transform: translateY(-3px); background: #3a3a4d; }
+.lifeline-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+.lifeline-badge {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background: var(--danger);
+    color: white;
+    font-size: 0.7rem;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Shop Modal specific styles */
+.shop-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 15px;
+    padding: 10px;
+}
+
+.shop-item {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 15px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: 0.2s;
+}
+
+.shop-item:hover { border-color: var(--shop); background: rgba(255, 0, 204, 0.1); }
+
+.shop-item-details { text-align: right; }
+.shop-item-title { font-weight: bold; font-size: 1.1rem; }
+.shop-item-desc { font-size: 0.8rem; color: var(--text-muted); }
+.shop-item-price { font-family: monospace; font-weight: bold; color: var(--warning); font-size: 1.2rem; }
+
+/* מסך טעינה */
+#loading-screen {
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    background: rgba(0,0,0,0.95);
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 100;
+}
+
+.loader {
+    width: 60px;
+    height: 60px;
+    border: 5px solid var(--primary);
+    border-bottom-color: transparent;
+    border-radius: 50%;
+    animation: rotation 1s linear infinite;
+    margin-bottom: 20px;
+}
+
+.loading-text {
+    font-size: 1.5rem;
+    color: var(--secondary);
+    margin-bottom: 10px;
+}
+
+.loading-tip {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    max-width: 80%;
+    margin: 0 auto;
+}
+
+/* מסך סיום */
+#gameover-screen {
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+}
+
+.stat-row {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+    padding: 10px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+/* AI Thinking Bubble */
+.ai-thinking {
+    position: absolute;
+    bottom: 90px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(20, 20, 40, 0.95);
+    border: 1px solid var(--secondary);
+    padding: 15px;
+    border-radius: 15px;
+    color: #fff;
+    font-size: 0.95rem;
+    display: none;
+    z-index: 20;
+    max-width: 90%;
+    text-align: right;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.5);
+    line-height: 1.5;
+}
+
+/* Modals */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.85);
+    z-index: 200;
+    display: none;
+    justify-content: center;
+    align-items: center;
+    backdrop-filter: blur(5px);
+}
+
+.modal-overlay.active { display: flex; animation: popIn 0.3s ease-out; }
+
+.modal-content {
+    background: var(--bg-card);
+    width: 90%;
+    max-width: 500px;
+    max-height: 80vh;
+    border-radius: 20px;
+    border: 1px solid var(--primary);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 0 50px rgba(112, 0, 255, 0.3);
+}
+
+.modal-header {
+    background: linear-gradient(90deg, #2a0050, #1a1a2e);
+    padding: 15px;
+    text-align: center;
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: var(--secondary);
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    position: relative;
+}
+
+.modal-back-btn {
+    position: absolute;
+    left: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: white;
+    cursor: pointer;
+    font-size: 1.2rem;
+    display: none;
+}
+
+.modal-body {
+    padding: 20px;
+    overflow-y: auto;
+}
+
+.modal-footer {
+    padding: 15px;
+    border-top: 1px solid rgba(255,255,255,0.1);
+    text-align: center;
+}
+
+.achievement-item {
+    background: rgba(255,255,255,0.05);
+    padding: 10px;
+    margin-bottom: 10px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    opacity: 0.5; /* Locked state */
+}
+
+.achievement-item.unlocked {
+    opacity: 1;
+    background: linear-gradient(90deg, rgba(112, 0, 255, 0.2), transparent);
+    border: 1px solid var(--primary);
+}
+
+.achievement-icon { font-size: 1.5rem; }
+
+.leaderboard-item {
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center;
+    border-bottom: 1px solid #333; 
+    padding: 12px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.leaderboard-item:hover { background: rgba(255,255,255,0.05); }
+
+/* Floating Text Specifics */
+.float-text {
+    position: absolute;
+    font-weight: bold;
+    pointer-events: none;
+    z-index: 100;
+    white-space: nowrap;
+    text-shadow: 0 0 5px rgba(0,0,0,0.8);
+}
+
+.float-up {
+    animation: float-up 1s ease-out forwards;
+}
+
+.float-center {
+    animation: float-center 2s ease-out forwards;
+    font-size: 2rem;
+}
+
+/* רספונסיביות */
+@media (max-width: 480px) {
+    .game-title { font-size: 3rem; }
+    .options-grid { grid-template-columns: 1fr; }
+    .btn { width: 100%; }
+    .name-input { width: 100%; }
+}
+
+/* New Menu Top Bar */
+.menu-top-bar {
+    width: 100%;
+    display: flex;
+    justify-content: flex-end; /* Align to right */
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    z-index: 50;
+}
+
+.btn-icon-small {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    width: 45px;
+    height: 45px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+}
+
+.btn-icon-small:hover {
+    background: rgba(255, 255, 255, 0.1);
+    transform: scale(1.05);
+    border-color: var(--secondary);
+}
+
+.status-dot {
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    width: 10px;
+    height: 10px;
+    background: var(--success);
+    border-radius: 50%;
+    box-shadow: 0 0 5px var(--success);
+}
+
+/* Authentication Tabs in Modal */
+.auth-tabs button:hover {
+    color: white !important;
 }

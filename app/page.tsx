@@ -1,65 +1,990 @@
-import Image from "next/image";
+// trivia-rush\app\page.tsx
 
-export default function Home() {
+'use client';
+
+import { useEffect, useState } from 'react';
+import Script from 'next/script';
+import { supabaseBrowser } from '../utils/supabase-browser';
+
+declare global {
+  interface Window {
+    triviaRushInit?: () => void;
+    startGame?: () => void;
+    startDailyChallenge?: () => void;
+    startCustomGame?: () => void;
+    openLeaderboard?: (type?: string) => void;
+    openInstructions?: () => void;
+    closeModal?: (id: string) => void;
+    buyItem?: (type: string, btn?: HTMLButtonElement) => void;
+    openShop?: () => void;
+    closeShop?: () => void;
+    useLifeline?: (type: string) => void;
+    returnToMenu?: () => void;
+    backToLeaderboard?: () => void;
+    addCustomTopic?: () => void;
+    toggleGoogleSearch?: () => void;
+    showPlayerDetails?: (index: number) => void;
+    removeCustomTopic?: (topic: string) => void;
+
+    currentUser?: {
+      id: string;
+      email?: string | null;
+    };
+    userApiKey?: string | null;
+  }
+}
+
+export default function HomePage() {
+  const [loadingUser, setLoadingUser] = useState(true);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authError, setAuthError] = useState<string | null>(null);
+  
+  // Modals
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showMainShopModal, setShowMainShopModal] = useState(false);
+  const [shopTab, setShopTab] = useState<'items' | 'cosmetics'>('items');
+
+  // Shop & Stats
+  const [userBalance, setUserBalance] = useState(0);
+  const [dailyAttempts, setDailyAttempts] = useState(0);
+  const [hasRetryPass, setHasRetryPass] = useState(false);
+  const [inventory, setInventory] = useState<string[]>([]);
+  const [activeTheme, setActiveTheme] = useState('default');
+  const [isGolden, setIsGolden] = useState(false);
+  const [shopLoading, setShopLoading] = useState(false);
+
+  // API Key
+  const [apiKeyInput, setApiKeyInput] = useState('');
+  const [storedApiKey, setStoredApiKey] = useState<string | null>(null);
+  
+  // Daily Challenge Timer State
+  const [timeToNextChallenge, setTimeToNextChallenge] = useState('');
+  const [dailyStatus, setDailyStatus] = useState<any>(null); // סטטוס האתגר היומי
+
+  useEffect(() => {
+    // Init Game
+    window.triviaRushInit && window.triviaRushInit();
+
+    // Check Auth
+    supabaseBrowser.auth.getUser().then(({ data }) => {
+      const user = data?.user;
+      if (user) {
+        window.currentUser = { id: user.id, email: user.email };
+        setUserEmail(user.email ?? null);
+        setUserId(user.id);
+        fetchUserShopData(user.id); // Load balance immediately
+      }
+      setLoadingUser(false);
+    });
+
+    // Check Local Storage for API Key
+    const localKey = localStorage.getItem('trivia_gemini_key');
+    if (localKey) {
+        setStoredApiKey(localKey);
+        window.userApiKey = localKey;
+    }
+
+    // Start Timers
+    const timerInterval = setInterval(calculateTimeUntilMidnightIL, 1000);
+    calculateTimeUntilMidnightIL(); 
+
+    // Poll Daily Status (Read Only)
+    checkDailyStatus();
+    const statusInterval = setInterval(checkDailyStatus, 30000); 
+
+    return () => {
+        clearInterval(timerInterval);
+        clearInterval(statusInterval);
+    };
+  }, []);
+
+  async function fetchUserShopData(uid: string) {
+      try {
+          const res = await fetch(`/api/shop?userId=${uid}`);
+          if (res.ok) {
+              const data = await res.json();
+              setUserBalance(data.balance);
+              setDailyAttempts(data.attempts);
+              setHasRetryPass(data.hasRetryPass);
+              setInventory(data.inventory || []);
+              setActiveTheme(data.activeTheme || 'default');
+              setIsGolden(data.isGolden);
+              
+              applyTheme(data.activeTheme || 'default');
+          }
+      } catch (e) {
+          console.error('Failed to fetch shop data', e);
+      }
+  }
+
+  function applyTheme(themeName: string) {
+      document.body.className = ''; 
+      if (themeName && themeName !== 'default') {
+          document.body.classList.add(`theme-${themeName.replace('theme_', '')}`);
+      }
+  }
+
+  async function checkDailyStatus() {
+      try {
+          const res = await fetch('/api/daily-challenge');
+          if(res.ok) {
+              const data = await res.json();
+              setDailyStatus(data);
+          }
+      } catch (e) {
+          console.error('Error checking daily status', e);
+      }
+  }
+
+  function saveApiKey() {
+      if(!apiKeyInput.trim()) return;
+      localStorage.setItem('trivia_gemini_key', apiKeyInput.trim());
+      setStoredApiKey(apiKeyInput.trim());
+      window.userApiKey = apiKeyInput.trim();
+      setApiKeyInput('');
+  }
+
+  function removeApiKey() {
+      localStorage.removeItem('trivia_gemini_key');
+      setStoredApiKey(null);
+      window.userApiKey = null;
+  }
+
+  function calculateTimeUntilMidnightIL() {
+      const now = new Date();
+      const israelTimeStr = now.toLocaleString('en-US', { timeZone: 'Asia/Jerusalem' });
+      const israelTime = new Date(israelTimeStr);
+      const target = new Date(israelTime);
+      target.setHours(24, 0, 0, 0);
+      const diff = target.getTime() - israelTime.getTime();
+      
+      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+      setTimeToNextChallenge(
+          `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+      );
+  }
+
+  // --- Start Daily Challenge Logic ---
+  async function handleStartDaily() {
+      if (!userId) {
+          alert('חובה להתחבר כדי לשחק באתגר היומי (כדי שנשמור את התוצאה שלך!)');
+          setShowAuthModal(true);
+          return;
+      }
+
+      // Refresh data before checking
+      await fetchUserShopData(userId);
+      
+      // Perform server-side check and "use" attempt
+      try {
+          const res = await fetch('/api/daily-challenge/attempt', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({ userId })
+          });
+          const data = await res.json();
+
+          if (data.allowed) {
+              // GO!
+              if(window.startDailyChallenge) window.startDailyChallenge();
+          } else {
+              // Blocked - Handle specific reasons
+              if (data.reason === 'daily_limit_reached') {
+                  alert('הגעת למגבלת המשחקים היומית (2/2)! 🛑\nנתראה באתגר של מחר.');
+              } else {
+                  alert('ניצלת את הניסיון החינמי היומי! 🛑\nכנס לחנות כדי לקנות כרטיס קאמבק לניסיון נוסף.');
+              }
+              setShowMainShopModal(true);
+          }
+      } catch (e) {
+          alert('שגיאה בתקשורת. נסה שוב.');
+      }
+  }
+
+  async function buyItem(itemId: string) {
+      if (!userId) return;
+      setShopLoading(true);
+      try {
+          const res = await fetch('/api/shop', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({ userId, itemId })
+          });
+          const data = await res.json();
+          
+          if (res.ok && data.success) {
+              if (data.message === 'Activated') {
+                   // Item was already owned, just activated
+                   if (itemId.startsWith('theme_')) applyTheme(itemId);
+                   alert('פריט הופעל בהצלחה! ✨');
+              } else {
+                   // Item bought
+                   setUserBalance(data.newBalance);
+                   if(itemId === 'retry_pass') setHasRetryPass(true);
+                   alert('רכישה בוצעה בהצלחה! 🛍️');
+              }
+              // Refresh full state
+              fetchUserShopData(userId);
+          } else {
+              alert('שגיאה: ' + (data.error === 'Insufficient funds' ? 'אין מספיק כסף 😔' : data.error));
+          }
+      } catch (e) {
+          alert('תקלה ברכישה.');
+      } finally {
+          setShopLoading(false);
+      }
+  }
+
+  async function handleAuthSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setAuthError(null);
+
+    if (!authEmail || !authPassword) {
+      setAuthError('נא למלא אימייל וסיסמה');
+      return;
+    }
+
+    try {
+      if (authMode === 'register') {
+        const { data, error } = await supabaseBrowser.auth.signUp({
+          email: authEmail,
+          password: authPassword,
+        });
+        if (error) throw error;
+        const user = data.user;
+        if (user) {
+          window.currentUser = { id: user.id, email: user.email };
+          setUserEmail(user.email ?? null);
+          setUserId(user.id);
+          setShowAuthModal(false); 
+        }
+      } else {
+        const { data, error } = await supabaseBrowser.auth.signInWithPassword({
+          email: authEmail,
+          password: authPassword,
+        });
+        if (error) throw error;
+        const user = data.user;
+        if (user) {
+          window.currentUser = { id: user.id, email: user.email };
+          setUserEmail(user.email ?? null);
+          setUserId(user.id);
+          setShowAuthModal(false); 
+          fetchUserShopData(user.id);
+        }
+      }
+      setAuthEmail('');
+      setAuthPassword('');
+    } catch (err: any) {
+      console.error('Auth error', err);
+      setAuthError(err?.message ?? 'שגיאה בהתחברות');
+    }
+  }
+
+  async function handleLogout() {
+    await supabaseBrowser.auth.signOut();
+    window.currentUser = undefined;
+    setUserEmail(null);
+    setUserId(null);
+  }
+
+  const handleCustomGameStart = () => {
+      if (!storedApiKey) {
+          alert('כדי לשחק במשחק מותאם אישית עליך להזין מפתח API בפרופיל האישי.');
+          setShowAuthModal(true);
+          return;
+      }
+      if (window.startCustomGame) {
+          window.startCustomGame();
+      }
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <>
+      <Script
+        src="https://unpkg.com/lucide@latest"
+        strategy="beforeInteractive"
+      />
+      <Script
+        src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"
+        strategy="beforeInteractive"
+      />
+      <Script src="/game.js" strategy="afterInteractive" />
+
+      <div id="audio-controller"></div>
+
+      {/* --- Main Shop Modal --- */}
+      <div className={`modal-overlay ${showMainShopModal ? 'active' : ''}`} style={{zIndex: 260}}>
+        <div className="modal-content" style={{maxWidth: 450, borderColor: 'gold', height: '80vh'}}>
+            <div className="modal-header" style={{background: 'linear-gradient(90deg, #3d3300, #1a1a2e)', color: 'gold'}}>
+                <button className="modal-back-btn" style={{display: 'block', fontSize: '1.5rem'}} onClick={() => setShowMainShopModal(false)}>×</button>
+                <span>🏪 חנות ראשית</span>
+            </div>
+            
+            <div className="modal-body" style={{textAlign: 'center', display: 'flex', flexDirection: 'column', height: '100%'}}>
+                <div style={{fontSize: '2rem', fontWeight: 'bold', color: 'var(--success)', marginBottom: 10}}>₪{userBalance.toLocaleString()}</div>
+                
+                {/* Tabs */}
+                <div style={{display:'flex', gap: 10, marginBottom: 15, borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: 10}}>
+                    <button className="btn" style={{flex: 1, padding: 8, fontSize: '0.9rem', background: shopTab === 'items' ? 'var(--primary)' : 'rgba(255,255,255,0.1)'}} onClick={() => setShopTab('items')}>פריטים</button>
+                    <button className="btn" style={{flex: 1, padding: 8, fontSize: '0.9rem', background: shopTab === 'cosmetics' ? 'var(--primary)' : 'rgba(255,255,255,0.1)'}} onClick={() => setShopTab('cosmetics')}>עיצוב</button>
+                </div>
+
+                <div style={{overflowY: 'auto', flex: 1}}>
+                    {shopTab === 'items' ? (
+                        <div className="shop-grid">
+                            <div className="shop-item" style={{flexDirection: 'column', alignItems: 'stretch', gap: 5, borderColor: 'gold', background: 'rgba(255,215,0,0.05)'}}>
+                                <div style={{display:'flex', justifyContent:'space-between'}}>
+                                    <div style={{textAlign:'right'}}>
+                                        <div style={{fontWeight:'bold', color:'gold'}}>🎫 כרטיס קאמבק</div>
+                                        <div style={{fontSize:'0.75rem', color:'#aaa'}}>ניסיון נוסף להיום</div>
+                                    </div>
+                                    <div style={{fontWeight:'bold'}}>₪5,000</div>
+                                </div>
+                                {/* Logic: 
+                                    If attempts >= 2: Completed max for today.
+                                    If attempts < 2 AND hasRetryPass: Already bought, waiting to use.
+                                    Else: Can buy.
+                                */}
+                                {dailyAttempts >= 2 ? (
+                                    <button className="btn" disabled style={{background: '#555', cursor: 'not-allowed', opacity: 0.7}}>
+                                         🚫 השתמשת בכל הניסיונות להיום
+                                    </button>
+                                ) : hasRetryPass ? (
+                                    <button className="btn" disabled style={{background: 'var(--success)', cursor: 'default', opacity: 1}}>
+                                        ✅ יש לך כרטיס (פנוי לשימוש)
+                                    </button>
+                                ) : (
+                                    <button 
+                                        className="btn" 
+                                        style={{background: 'gold', color: 'black'}}
+                                        onClick={() => buyItem('retry_pass')}
+                                        disabled={shopLoading || userBalance < 5000}
+                                    >
+                                        {shopLoading ? 'מבצע רכישה...' : (userBalance < 5000 ? 'חסר כסף' : 'קנה עכשיו')}
+                                    </button>
+                                )}
+                            </div>
+
+                            <div className="shop-item" style={{flexDirection: 'column', alignItems: 'stretch', gap: 5, borderColor: '#BF953F'}}>
+                                <div style={{display:'flex', justifyContent:'space-between'}}>
+                                    <div style={{textAlign:'right'}}>
+                                        <div style={{fontWeight:'bold'}} className="golden-name">✨ שם הזהב (24 שעות)</div>
+                                        <div style={{fontSize:'0.75rem', color:'#aaa'}}>השם שלך יזהר בטבלה</div>
+                                    </div>
+                                    <div style={{fontWeight:'bold'}}>₪5,000</div>
+                                </div>
+                                <button className="btn" disabled={isGolden} onClick={() => buyItem('golden_name')} style={{padding: '5px', fontSize:'0.9rem', background: isGolden ? 'var(--success)' : '#BF953F'}}>
+                                    {isGolden ? 'פעיל' : 'קנה'}
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="shop-grid">
+                            <div style={{textAlign:'right', fontSize:'0.9rem', color:'#888', marginTop: 10}}>ערכות נושא (Themes)</div>
+                            {[
+                                {id: 'theme_default', name: 'רגיל', price: 0, desc: 'העיצוב המקורי'},
+                                {id: 'theme_matrix', name: 'מטריקס', price: 2500, desc: 'קוד ירוק על שחור'},
+                                {id: 'theme_retro', name: 'רטרו ניאון', price: 2500, desc: 'אווירת שנות ה-80'},
+                                {id: 'theme_gold', name: 'יוקרה', price: 2500, desc: 'שחור וזהב'}
+                            ].map(item => {
+                                // Default is always owned
+                                const isOwned = inventory.includes(item.id) || item.id === 'theme_default';
+                                const isActive = activeTheme === item.id || (activeTheme === 'default' && item.id === 'theme_default');
+                                
+                                return (
+                                    <div key={item.id} className="shop-item" style={{flexDirection: 'column', alignItems: 'stretch', gap: 5}}>
+                                        <div style={{display:'flex', justifyContent:'space-between'}}>
+                                            <div style={{textAlign:'right'}}>
+                                                <div style={{fontWeight:'bold'}}>{item.name}</div>
+                                                <div style={{fontSize:'0.75rem', color:'#aaa'}}>{item.desc}</div>
+                                            </div>
+                                            <div style={{fontWeight:'bold'}}>{item.price === 0 ? 'חינם' : (isOwned ? 'בבעלות' : `₪${item.price}`)}</div>
+                                        </div>
+                                        <button className="btn" disabled={isActive} onClick={() => buyItem(item.id)} style={{padding: '5px', fontSize:'0.9rem', background: isActive ? '#555' : (isOwned ? 'var(--success)' : 'var(--primary)')}}>
+                                            {isActive ? 'פעיל' : (isOwned ? 'הפעל' : 'קנה')}
+                                        </button>
+                                    </div>
+                                )
+                            })}
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+      </div>
+
+      {/* Auth & Profile Modal */}
+      <div className={`modal-overlay ${showAuthModal ? 'active' : ''}`} style={{zIndex: 250}}>
+        <div className="modal-content" style={{maxWidth: 400}}>
+            <div className="modal-header">
+                <button 
+                    className="modal-back-btn" 
+                    style={{display: 'block', fontSize: '1.5rem'}}
+                    onClick={() => setShowAuthModal(false)}
+                >
+                    ×
+                </button>
+                <span>👤 פרופיל שחקן והגדרות</span>
+            </div>
+            <div className="modal-body" style={{textAlign: 'center'}}>
+                
+                {/* Login Section */}
+                <div style={{marginBottom: 20, borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: 20}}>
+                    {loadingUser ? (
+                        <div>בודק חיבור...</div>
+                    ) : userEmail ? (
+                        <div style={{display:'flex', flexDirection:'column', gap: 10, alignItems:'center'}}>
+                            <div style={{fontSize: '2rem'}}>🤠</div>
+                            <div>
+                                מחובר כ:<br/>
+                                <strong>{userEmail}</strong>
+                            </div>
+                            <button className="btn btn-outline" onClick={handleLogout} style={{fontSize: '0.8rem', padding: '5px 15px'}}>
+                                התנתק
+                            </button>
+                        </div>
+                    ) : (
+                        <form onSubmit={handleAuthSubmit} style={{ textAlign: 'right' }}>
+                            <div style={{textAlign:'center', marginBottom: 10, fontSize: '0.9rem', color: 'var(--text-muted)'}}>
+                                התחברות לטבלת האלופים
+                            </div>
+                            <div className="auth-tabs" style={{display:'flex', marginBottom: 10}}>
+                                <button type="button" style={{flex:1, padding: 5, background:'none', border:'none', color: authMode === 'login' ? 'var(--secondary)' : 'gray', borderBottom: authMode === 'login' ? '2px solid var(--secondary)' : 'none', cursor:'pointer'}} onClick={() => setAuthMode('login')}>התחברות</button>
+                                <button type="button" style={{flex:1, padding: 5, background:'none', border:'none', color: authMode === 'register' ? 'var(--secondary)' : 'gray', borderBottom: authMode === 'register' ? '2px solid var(--secondary)' : 'none', cursor:'pointer'}} onClick={() => setAuthMode('register')}>הרשמה</button>
+                            </div>
+                            <input type="email" placeholder="אימייל" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} className="name-input" style={{ width: '100%', marginBottom: 5, padding: 8, fontSize: '0.9rem' }} />
+                            <input type="password" placeholder="סיסמה" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} className="name-input" style={{ width: '100%', marginBottom: 10, padding: 8, fontSize: '0.9rem' }} />
+                            {authError && <div style={{ color: 'var(--danger)', fontSize: '0.8rem', marginBottom: 5, textAlign:'center' }}>{authError}</div>}
+                            <button type="submit" className="btn" style={{ width: '100%', padding: '8px 0', fontSize: '1rem' }}>{authMode === 'login' ? 'התחבר' : 'הירשם'}</button>
+                        </form>
+                    )}
+                </div>
+
+                {/* API Key Section */}
+                <div style={{textAlign: 'right'}}>
+                    <div style={{color: 'gold', fontWeight: 'bold', marginBottom: 5}}>🔑 מפתח אישי (למשחק מותאם אישית)</div>
+                    <div style={{fontSize: '0.8rem', color: '#ccc', marginBottom: 10}}>
+                        נדרש מפתח חינמי של Google Gemini כדי לשחק בנושאים משלך.<br/>
+                        <a href="https://aistudio.google.com/api-keys" target="_blank" style={{color: 'var(--secondary)', textDecoration: 'underline'}}>השג מפתח כאן</a>
+                    </div>
+
+                    {storedApiKey ? (
+                        <div style={{background: 'rgba(0,255,157,0.1)', padding: 10, borderRadius: 8, border: '1px solid var(--success)', textAlign: 'center'}}>
+                            <div style={{color: 'var(--success)', fontWeight: 'bold'}}>✅ מפתח שמור</div>
+                            <div style={{fontSize: '0.7rem', color: '#aaa', margin: '5px 0'}}>נשמר ב-LocalStorage של הדפדפן שלך בלבד.</div>
+                            <button onClick={removeApiKey} style={{background: 'none', border: '1px solid var(--danger)', color: 'var(--danger)', padding: '5px 10px', borderRadius: 5, cursor: 'pointer', fontSize: '0.8rem'}}>
+                                הסר מפתח
+                            </button>
+                        </div>
+                    ) : (
+                        <div style={{display: 'flex', gap: 5}}>
+                            <input 
+                                type="text" 
+                                placeholder="הדבק כאן את ה-API Key" 
+                                value={apiKeyInput}
+                                onChange={(e) => setApiKeyInput(e.target.value)}
+                                className="name-input"
+                                style={{flex: 1, marginBottom: 0, padding: 8, fontSize: '0.8rem'}}
+                            />
+                            <button onClick={saveApiKey} className="btn" style={{padding: '5px 15px', margin: 0, fontSize: '0.9rem'}}>שמור</button>
+                        </div>
+                    )}
+                </div>
+
+            </div>
+        </div>
+      </div>
+
+      {/* Leaderboard Modal */}
+      <div id="leaderboard-modal" className="modal-overlay">
+        <div className="modal-content">
+          <div className="modal-header">
+            <button
+              className="modal-back-btn"
+              id="modal-back-btn"
+              onClick={() =>
+                window.backToLeaderboard && window.backToLeaderboard()
+              }
+            >
+              <i data-lucide="arrow-right" />
+            </button>
+            <span id="modal-title">🏆 היכל התהילה</span>
+          </div>
+          <div className="modal-body" id="modal-body-content" />
+          <div className="modal-footer">
+            <button
+              className="btn"
+              style={{ width: 'auto', padding: '10px 30px' }}
+              onClick={() =>
+                window.closeModal && window.closeModal('leaderboard-modal')
+              }
+            >
+              סגור
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Shop Modal */}
+      <div id="shop-modal" className="modal-overlay">
+        <div className="modal-content" style={{ borderColor: 'var(--shop)' }}>
+          <div className="modal-header" style={{ color: 'var(--shop)' }}>🛒 חנות המשחק</div>
+          <div className="modal-body">
+            <div style={{textAlign: 'center', marginBottom: 15, color: 'var(--text-muted)'}}>המשחק <b>לא עוצר</b>! קנה מהר! ⏳</div>
+            <div className="shop-grid">
+              <button
+                className="shop-item"
+                onClick={(e) =>
+                  window.buyItem && window.buyItem('time_small', e.currentTarget)
+                }
+              >
+                <div className="shop-item-details">
+                  <div className="shop-item-title">⏰ תוספת זמן קצרה</div>
+                  <div className="shop-item-desc">+10 שניות</div>
+                </div>
+                <div className="shop-item-price" id="shop-price-time-small">
+                  ₪500
+                </div>
+              </button>
+
+              <button
+                className="shop-item"
+                onClick={(e) =>
+                  window.buyItem && window.buyItem('time_big', e.currentTarget)
+                }
+              >
+                <div className="shop-item-details">
+                  <div className="shop-item-title">⏳ תוספת זמן גדולה</div>
+                  <div className="shop-item-desc">+30 שניות</div>
+                </div>
+                <div className="shop-item-price" id="shop-price-time-big">
+                  ₪1,200
+                </div>
+              </button>
+
+              <button
+                className="shop-item"
+                onClick={(e) =>
+                  window.buyItem &&
+                  window.buyItem('lifelines', e.currentTarget)
+                }
+              >
+                <div className="shop-item-details">
+                  <div className="shop-item-title">❤️ מילוי עזרות</div>
+                  <div className="shop-item-desc">מחזיר את כל העזרות</div>
+                </div>
+                <div className="shop-item-price" id="shop-price-lifelines">
+                  ₪2,000
+                </div>
+              </button>
+            </div>
+          </div>
+          <div className="modal-footer">
+            <button
+              className="btn btn-outline"
+              onClick={() => window.closeShop && window.closeShop()}
+            >
+              חזור למשחק
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Instructions Modal */}
+      <div id="instructions-modal" className="modal-overlay">
+        <div className="modal-content">
+          <div className="modal-header">📜 איך משחקים?</div>
+          <div
+            className="modal-body"
+            style={{ textAlign: 'right', lineHeight: 1.6 }}
+          >
+             <div style={{ marginBottom: 15 }}>
+              <h3 style={{ color: 'var(--secondary)', marginBottom: 5 }}>
+                ⚡ המטרה
+              </h3>
+              לענות על כמה שיותר שאלות, לצבור כסף ולשרוד כמה שיותר זמן!
+            </div>
+
+            <div style={{ marginBottom: 15 }}>
+              <h3 style={{ color: 'var(--warning)', marginBottom: 5 }}>
+                ⏳ חוקי בסיס
+              </h3>
+              <ul style={{ paddingRight: 20 }}>
+                <li>הזמן הוא המשאב הכי חשוב (נגמר = הפסד).</li>
+                <li>תשובה נכונה = כסף + זמן.</li>
+                <li>תשובה שגויה = קנס זמן.</li>
+                <li><b>הזמן לא עוצר בחנות!</b></li>
+              </ul>
+            </div>
+          </div>
+          <div className="modal-footer">
+            <button
+              className="btn"
+              style={{ width: 'auto', padding: '10px 30px' }}
+              onClick={() =>
+                window.closeModal && window.closeModal('instructions-modal')
+              }
+            >
+              הבנתי, יאללה!
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Menu */}
+      <div id="menu-screen" className="screen active">
+        <div className="menu-top-bar" style={{justifyContent: 'space-between', paddingLeft: 15}}>
+            {/* New Shop Button (Left) */}
+            <button 
+                className="btn-icon-small" 
+                onClick={() => setShowMainShopModal(true)}
+                style={{borderColor: 'gold', color: 'gold'}}
+            >
+                <i data-lucide="shopping-bag" />
+            </button>
+
+            {/* Profile Button (Right) */}
+            <button className="btn-icon-small" onClick={() => setShowAuthModal(true)} style={{borderColor: userEmail ? 'var(--success)' : 'rgba(255,255,255,0.3)'}}>
+                <i data-lucide={userEmail ? "user-check" : "user"} />{userEmail && <span className="status-dot"></span>}
+            </button>
+        </div>
+
+        <div className="game-title">מירוץ הידע</div>
+        <div className="subtitle">הזמן הוא הכסף שלך. אל תבזבז אותו.</div>
+
+        <input
+          type="text"
+          id="player-name-input"
+          className="name-input"
+          placeholder="הכנס את שמך..."
+          maxLength={15}
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+
+        {/* --- DAILY CHALLENGE SECTION (UPDATED) --- */}
+        <div style={{background: 'linear-gradient(135deg, rgba(255,215,0,0.1), rgba(255,140,0,0.1))', padding: '15px', borderRadius: '15px', marginBottom: '20px', border: '1px solid rgba(255,215,0,0.3)', width: '100%', maxWidth: '500px', textAlign: 'center'}}>
+            <div style={{color:'gold', fontWeight:'bold', marginBottom:'5px', fontSize:'1.1rem'}}>📅 האתגר היומי</div>
+            
+            {dailyStatus && dailyStatus.status !== 'complete' ? (
+                // --- מצב טעינה / בנייה ---
+                <div style={{marginBottom: '10px'}}>
+                    <div style={{fontSize:'0.9rem', color:'#aaa', marginBottom:'5px'}}>
+                        {dailyStatus.status === 'not_started' ? 'ממתין לתחילת יצירה...' : 'בונה את מאגר השאלות לחצות...'}
+                    </div>
+                    <div style={{width: '100%', height: '10px', background: 'rgba(255,255,255,0.1)', borderRadius: '5px', overflow: 'hidden', position: 'relative'}}>
+                        <div style={{width: `${(dailyStatus.progress / dailyStatus.total) * 100}%`, height: '100%', background: 'linear-gradient(90deg, var(--primary), var(--secondary))', transition: 'width 0.5s ease-in-out'}} />
+                    </div>
+                    <div style={{fontSize:'0.8rem', color:'var(--text-muted)', marginTop:'5px', display:'flex', justifyContent:'space-between'}}>
+                        <span>סטטוס: {dailyStatus.currentBatch ? `נגלה ${dailyStatus.currentBatch}/3` : 'ממתין'}</span>
+                        <span>{dailyStatus.progress}/{dailyStatus.total} שאלות</span>
+                    </div>
+                </div>
+            ) : (
+                // --- מצב מוכן ---
+                <div style={{fontSize:'0.9rem', color:'#ddd', marginBottom:'10px'}}>
+                    101 שאלות ב-33 נושאים שונים. כולם מקבלים את אותו אתגר!
+                </div>
+            )}
+
+            <div style={{fontSize:'0.8rem', color:'var(--text-muted)', marginBottom:'10px'}}>
+                אתגר חדש בעוד: <span style={{fontFamily:'monospace', color:'var(--success)', fontWeight:'bold'}}>{timeToNextChallenge}</span>
+            </div>
+            
+            <button 
+                className="btn" 
+                style={{
+                    background: 'linear-gradient(135deg, #FFD700, #FF8C00)', 
+                    color:'black', 
+                    width:'100%', 
+                    marginBottom:0,
+                    opacity: dailyStatus?.status !== 'complete' ? 0.6 : 1,
+                    cursor: dailyStatus?.status !== 'complete' ? 'not-allowed' : 'pointer'
+                }}
+                disabled={dailyStatus?.status !== 'complete'}
+                onClick={handleStartDaily}
             >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+                {dailyStatus?.status !== 'complete' ? (
+                    <span><i data-lucide="loader" /> מכין שאלות...</span>
+                ) : (
+                    <span><i data-lucide="star" /> שחק באתגר היומי</span>
+                )}
+            </button>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+
+        {/* Custom topics Section - CLEANED UP OVERLAY */}
+        <div className="custom-topics-container">
+          
+          <div className="input-group">
+            <input
+              type="text"
+              id="custom-topic-input"
+              className="name-input"
+              placeholder="נושא מותאם אישית..."
+              style={{
+                marginBottom: 0,
+                width: '70%',
+                borderRadius: '0 12px 12px 0',
+                textAlign: 'right',
+                paddingRight: 15,
+              }}
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+            <button
+              className="btn"
+              style={{
+                margin: 0,
+                width: '30%',
+                borderRadius: '12px 0 0 12px',
+                padding: 10,
+              }}
+              onClick={() => window.addCustomTopic && window.addCustomTopic()}
+            >
+              <i data-lucide="plus" /> הוסף
+            </button>
+          </div>
+          <div id="custom-topics-list" className="topics-list" />
+          
+          <div className="google-toggle-container" style={{marginTop: 10}}>
+            <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                חיפוש בגוגל
+            </span>
+            <label className="switch">
+                <input
+                type="checkbox"
+                id="google-search-toggle"
+                onChange={() =>
+                    window.toggleGoogleSearch && window.toggleGoogleSearch()
+                }
+                />
+                <span className="slider" />
+            </label>
+          </div>
+
+          <button
+            className="btn"
+            onClick={handleCustomGameStart}
+            style={{marginTop: 10, width: '100%', justifyContent: 'center'}}
           >
-            Documentation
-          </a>
+            <i data-lucide="play" /> התחל משחק מותאם
+          </button>
         </div>
-      </main>
-    </div>
+
+        <div style={{display:'flex', gap: 10, width: '100%', maxWidth: 500, marginTop: 20}}>
+            <button
+            className="btn btn-outline"
+            style={{flex: 1}}
+            onClick={() =>
+                window.openLeaderboard && window.openLeaderboard('daily')
+            }
+            >
+            <i data-lucide="trophy" /> הישגים ושיאים
+            </button>
+            <button
+            className="btn btn-outline"
+            style={{flex: 1}}
+            onClick={() =>
+                window.openInstructions && window.openInstructions()
+            }
+            >
+            <i data-lucide="book-open" /> הוראות
+            </button>
+        </div>
+
+        <div style={{ marginTop: 30, fontSize: '0.8rem', color: '#555' }}>
+          מופעל ע&quot;י Gemini AI
+        </div>
+      </div>
+
+      {/* Loading Screen */}
+      <div id="loading-screen" className="screen">
+        <div className="loader" />
+        <div className="loading-text" id="loading-msg">
+          מכין את המוח...
+        </div>
+        <div id="sources-list" />
+        <div className="loading-tip" id="loading-tip">
+          טיפ: שאלות קשות נותנות פחות זמן אבל יותר כסף!
+        </div>
+      </div>
+
+      {/* Game Screen */}
+      <div id="game-screen" className="screen">
+        <div className="hud">
+          <div className="stat-box" id="hud-time">
+            <span className="stat-label">זמן</span>
+            <span className="stat-value" id="time-display">
+              120.0
+            </span>
+          </div>
+          <div className="stat-box" id="hud-stage">
+            <span className="stat-label">שלב</span>
+            <span className="stat-value" id="stage-display">
+              1
+            </span>
+          </div>
+          <div className="stat-box" id="hud-money">
+            <span className="stat-label">קופה</span>
+            <span
+              className="stat-value"
+              style={{ color: 'var(--success)' }}
+            >
+              ₪<span id="score-display">0</span>
+            </span>
+          </div>
+        </div>
+
+        <div className="timer-container">
+          <div className="timer-bar" id="timer-bar" />
+        </div>
+        <div className="progress-text" id="stage-progress">
+          שאלה 1 מתוך 10
+        </div>
+
+        <div className="question-card">
+          <div
+            id="question-category"
+            style={{
+              position: 'absolute',
+              top: -10,
+              right: 20,
+              background: 'var(--primary)',
+              padding: '2px 10px',
+              borderRadius: 10,
+              fontSize: '0.8rem',
+            }}
+          >
+            כללי
+          </div>
+          <div className="question-text" id="question-text">
+            השאלה תופיע כאן...
+          </div>
+          <div className="options-grid" id="options-container" />
+        </div>
+
+        <div className="ai-thinking" id="ai-bubble">
+          Gemini חושב...
+        </div>
+
+        <div className="bottom-controls">
+          <div className="lifelines">
+            <button
+              className="lifeline-btn"
+              id="btn-5050"
+              title="50/50"
+              onClick={() =>
+                window.useLifeline && window.useLifeline('5050')
+              }
+            >
+              <span className="lifeline-badge">1</span>
+              <span style={{ fontWeight: 'bold' }}>50:50</span>
+            </button>
+            <button
+              className="lifeline-btn"
+              id="btn-ai"
+              title="שאל את Gemini"
+              onClick={() => window.useLifeline && window.useLifeline('ai')}
+            >
+              <span className="lifeline-badge">1</span>
+              <i data-lucide="bot" />
+            </button>
+            <button
+              className="lifeline-btn"
+              id="btn-freeze"
+              title="הקפאת זמן"
+              onClick={() =>
+                window.useLifeline && window.useLifeline('freeze')
+              }
+            >
+              <span className="lifeline-badge">1</span>
+              <i data-lucide="snowflake" />
+            </button>
+          </div>
+          <button
+            className="btn btn-shop"
+            style={{
+              width: 60,
+              height: 60,
+              borderRadius: '50%',
+              padding: 0,
+            }}
+            onClick={() => window.openShop && window.openShop()}
+          >
+            <i data-lucide="shopping-cart" />
+          </button>
+        </div>
+      </div>
+
+      {/* Game Over Screen */}
+      <div id="gameover-screen" className="screen">
+        <h1
+          style={{
+            fontSize: '3rem',
+            color: 'var(--danger)',
+            margin: 0,
+          }}
+        >
+          נגמר הזמן!
+        </h1>
+        <p className="subtitle" id="gameover-reason">
+          השעון הגיע ל-0
+        </p>
+
+        <div
+          style={{
+            background: 'var(--bg-card)',
+            padding: 20,
+            borderRadius: 15,
+            width: '100%',
+            marginBottom: 20,
+          }}
+        >
+          <div className="stat-row">
+            <span>שחקן:</span>
+            <span
+              style={{
+                color: 'var(--secondary)',
+                fontWeight: 'bold',
+              }}
+              id="final-name"
+            >
+              אורח
+            </span>
+          </div>
+          <div className="stat-row">
+            <span>סכום סופי:</span>
+            <span
+              style={{
+                color: 'var(--success)',
+                fontWeight: 'bold',
+              }}
+              id="final-score"
+            >
+              ₪0
+            </span>
+          </div>
+          <div className="stat-row">
+            <span>שלב שהגעת:</span>
+            <span id="final-stage">1</span>
+          </div>
+          <div className="stat-row">
+            <span>שאלות נכונות:</span>
+            <span id="final-correct">0</span>
+          </div>
+        </div>
+
+        <button
+          className="btn"
+          onClick={() => window.returnToMenu && window.returnToMenu()}
+        >
+          <i data-lucide="home" /> תפריט ראשי
+        </button>
+      </div>
+    </>
   );
 }
