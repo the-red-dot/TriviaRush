@@ -1,12 +1,16 @@
 import { NextResponse } from 'next/server';
 import { supabaseServer } from '../../../utils/supabase';
-import { ALL_SUB_TOPICS } from './topics'; // ייבוא רשימת הנושאים
+import { ALL_SUB_TOPICS } from './topics'; 
 
+// --- Config for Long Running Tasks ---
+// שינוי קריטי: מעבר ל-Edge מאפשר לורסל לחכות לתשובות ארוכות מ-AI בלי לקבל Timeout בתוכנית החינמית
+export const runtime = 'edge'; 
+export const maxDuration = 60; // מבקשים עד 60 שניות (המקסימום בתוכנית Hobby)
 export const dynamic = 'force-dynamic';
 
 const TOTAL_TARGET_QUESTIONS = 101;
-const BATCH_WAIT_MINUTES = 5; // עודכן ל-5 דקות
-const PRE_GENERATE_HOUR = 21; // מתחילים להכין את המחר החל משעה 21:00
+const BATCH_WAIT_MINUTES = 5; 
+const PRE_GENERATE_HOUR = 21; 
 
 const BATCH_CONFIG: any = {
   1: { topicsCount: 33 },
@@ -14,11 +18,17 @@ const BATCH_CONFIG: any = {
   3: { topicsCount: 35 },
 };
 
-// פונקציית עזר לקבלת אובייקט זמן ישראל
+// פונקציית עזר לקבלת אובייקט זמן ישראל (מותאמת ל-Edge)
 function getIsraelTime() {
   const now = new Date();
-  const israelTimeStr = now.toLocaleString('en-US', { timeZone: 'Asia/Jerusalem' });
-  return new Date(israelTimeStr);
+  try {
+      // ב-Edge Runtime לא תמיד יש את כל אזורי הזמן, זה ניסיון בטוח
+      const israelTimeStr = now.toLocaleString('en-US', { timeZone: 'Asia/Jerusalem' });
+      return new Date(israelTimeStr);
+  } catch (e) {
+      // Fallback ידני ל-UTC+3 אם הסביבה לא תומכת
+      return new Date(now.getTime() + (3 * 60 * 60 * 1000)); 
+  }
 }
 
 // המרת תאריך לסטרינג YYYY-MM-DD
@@ -66,11 +76,6 @@ export async function GET(req: Request) {
     const tomorrow = new Date(nowIL);
     tomorrow.setDate(tomorrow.getDate() + 1);
     const tomorrowStr = formatDate(tomorrow);
-
-    // לוגיקה חכמה:
-    // 1. קודם בודקים את היום. אם לא גמור - עובדים עליו.
-    // 2. אם היום גמור, בודקים אם השעה מאוחרת (>= 21:00).
-    // 3. אם כן, בודקים את מחר. אם מחר לא גמור - עובדים עליו.
 
     let targetDate = todayStr;
     let isPreGeneration = false;
@@ -141,33 +146,28 @@ export async function GET(req: Request) {
     if (now < nextRun) {
       const waitMinutes = Math.ceil((nextRun.getTime() - now.getTime()) / 60000);
       
-      // תיקון: אם זמן ההמתנה שנותר גדול מההגדרה החדשה (5 דקות), סימן שזה ערך ישן.
-      // במקרה כזה, נתעלם ממנו ונריץ את הנגלה.
+      // Override if legacy wait time (תיקון להתעלמות מזמני המתנה ישנים ארוכים)
       if (waitMinutes <= BATCH_WAIT_MINUTES) {
          return NextResponse.json({ message: `Waiting for next batch slot for ${targetDate}. ${waitMinutes} mins left.` });
       }
-      console.log(`[Cron] Legacy wait time detected (${waitMinutes}m > ${BATCH_WAIT_MINUTES}m). Overriding and running now.`);
+      console.log(`[Cron] Legacy wait time detected (${waitMinutes}m). Overriding.`);
     }
 
     const nextBatchNum = (challenge.current_batch || 0) + 1;
     
-    // הגנה
     if (nextBatchNum > 3) {
        await supabaseServer.from('daily_challenges').update({ status: 'complete' }).eq('challenge_date', targetDate);
        return NextResponse.json({ message: 'Marked as complete (Safety)' });
     }
 
     // --- הפעלת ג'מיני ---
-    const config = BATCH_CONFIG[nextBatchNum];
-    const questionsToGenerate = nextBatchNum === 3 ? 35 : 33; // לוודא סה"כ 101
+    const questionsToGenerate = nextBatchNum === 3 ? 35 : 33; 
 
-    // בחירת נושאים רנדומליים מתוך הרשימה הגדולה
     const shuffledTopics = shuffleArray(ALL_SUB_TOPICS);
     const selectedTopics = shuffledTopics.slice(0, questionsToGenerate);
 
     console.log(`[Cron] Generating Batch ${nextBatchNum} for ${targetDate}. Topics: ${selectedTopics.length}`);
 
-    // הגדרת הנחיות דינמיות לפי מספר הנגלה
     let difficultyInstruction = '';
     
     if (nextBatchNum === 1) {
@@ -182,7 +182,6 @@ export async function GET(req: Request) {
         3. חפש עובדות מעניינות שדורשות ידע מעט יותר מעמיק, אך עדיין הוגנות.
         4. אל תשאל שאלות טריוויאליות שכולם יודעים.`;
     } else {
-        // נגלה 3
         difficultyInstruction = `
         1. רמת קושי: נישתית/ספציפית.
         2. לכל נושא, התמקד בזווית ייחודית, נישה פנימית או פרט ספציפי, ולא בידע הכללי של הנושא.
@@ -232,7 +231,7 @@ export async function GET(req: Request) {
       newQuestionsRaw = JSON.parse(text);
     } catch (e) {
       console.error('JSON Parse Error', e);
-      // Retry in 5 mins
+      // במקרה שגיאה - נסה שוב עוד 5 דקות
       const retryTime = new Date(now.getTime() + 5 * 60000);
       await supabaseServer.from('daily_challenges').update({ 
           next_batch_at: retryTime.toISOString(),
