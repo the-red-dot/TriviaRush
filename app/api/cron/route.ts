@@ -3,9 +3,9 @@ import { supabaseServer } from '../../../utils/supabase';
 import { ALL_SUB_TOPICS } from './topics'; 
 
 // --- Config for Long Running Tasks ---
-// שינוי קריטי: מעבר ל-Edge מאפשר לורסל לחכות לתשובות ארוכות מ-AI בלי לקבל Timeout בתוכנית החינמית
-export const runtime = 'edge'; 
-export const maxDuration = 60; // מבקשים עד 60 שניות (המקסימום בתוכנית Hobby)
+// שינוי: חוזרים ל-Node.js שהוא יציב יותר למשימות Cron ומגדירים לו 60 שניות (המקסימום בחינם)
+export const runtime = 'nodejs'; 
+export const maxDuration = 60; 
 export const dynamic = 'force-dynamic';
 
 const TOTAL_TARGET_QUESTIONS = 101;
@@ -18,15 +18,13 @@ const BATCH_CONFIG: any = {
   3: { topicsCount: 35 },
 };
 
-// פונקציית עזר לקבלת אובייקט זמן ישראל (מותאמת ל-Edge)
+// פונקציית עזר לקבלת אובייקט זמן ישראל
 function getIsraelTime() {
   const now = new Date();
   try {
-      // ב-Edge Runtime לא תמיד יש את כל אזורי הזמן, זה ניסיון בטוח
       const israelTimeStr = now.toLocaleString('en-US', { timeZone: 'Asia/Jerusalem' });
       return new Date(israelTimeStr);
   } catch (e) {
-      // Fallback ידני ל-UTC+3 אם הסביבה לא תומכת
       return new Date(now.getTime() + (3 * 60 * 60 * 1000)); 
   }
 }
@@ -146,7 +144,7 @@ export async function GET(req: Request) {
     if (now < nextRun) {
       const waitMinutes = Math.ceil((nextRun.getTime() - now.getTime()) / 60000);
       
-      // Override if legacy wait time (תיקון להתעלמות מזמני המתנה ישנים ארוכים)
+      // Override if legacy wait time
       if (waitMinutes <= BATCH_WAIT_MINUTES) {
          return NextResponse.json({ message: `Waiting for next batch slot for ${targetDate}. ${waitMinutes} mins left.` });
       }
