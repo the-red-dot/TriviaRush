@@ -1,33 +1,8 @@
-// trivia-rush\app\page.tsx
-
 'use client';
 
 import { useEffect, useState } from 'react';
-// import Script from 'next/script'; // Removed to avoid build error
-// import { supabaseBrowser } from '../utils/supabase-browser'; // Removed to avoid build error
-import { createClient } from '@supabase/supabase-js';
-
-// --- Inline Supabase Client Setup (Fixes import error) ---
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const supabaseBrowser = createClient(supabaseUrl, supabaseAnonKey);
-
-// --- Custom Script Loader Component (Fixes next/script error) ---
-const ScriptLoader = ({ src, onLoad }: { src: string; onLoad?: () => void }) => {
-  useEffect(() => {
-    const script = document.createElement('script');
-    script.src = src;
-    script.async = true;
-    if (onLoad) {
-      script.onload = onLoad;
-    }
-    document.body.appendChild(script);
-    return () => {
-      document.body.removeChild(script);
-    };
-  }, [src, onLoad]);
-  return null;
-};
+import Script from 'next/script';
+import { supabaseBrowser } from '../utils/supabase-browser';
 
 declare global {
   interface Window {
@@ -65,7 +40,6 @@ export default function HomePage() {
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [authError, setAuthError] = useState<string | null>(null);
-  const [gameScriptLoaded, setGameScriptLoaded] = useState(false);
   
   // Modals
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -89,21 +63,9 @@ export default function HomePage() {
   const [timeToNextChallenge, setTimeToNextChallenge] = useState('');
   const [dailyStatus, setDailyStatus] = useState<any>(null); // סטטוס האתגר היומי
 
-  // Try to init game when script is loaded
   useEffect(() => {
-    if (gameScriptLoaded && window.triviaRushInit) {
-        window.triviaRushInit();
-    }
-  }, [gameScriptLoaded]);
-
-  useEffect(() => {
-    // Init Game check interval (fallback)
-    const initInterval = setInterval(() => {
-        if (window.triviaRushInit) {
-            window.triviaRushInit();
-            clearInterval(initInterval);
-        }
-    }, 500);
+    // Init Game
+    window.triviaRushInit && window.triviaRushInit();
 
     // Check Auth
     supabaseBrowser.auth.getUser().then(({ data }) => {
@@ -135,7 +97,6 @@ export default function HomePage() {
     return () => {
         clearInterval(timerInterval);
         clearInterval(statusInterval);
-        clearInterval(initInterval);
     };
   }, []);
 
@@ -345,9 +306,15 @@ export default function HomePage() {
 
   return (
     <>
-      <ScriptLoader src="https://unpkg.com/lucide@latest" />
-      <ScriptLoader src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js" />
-      <ScriptLoader src="/game.js" onLoad={() => setGameScriptLoaded(true)} />
+      <Script
+        src="https://unpkg.com/lucide@latest"
+        strategy="beforeInteractive"
+      />
+      <Script
+        src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"
+        strategy="beforeInteractive"
+      />
+      <Script src="/game.js" strategy="afterInteractive" />
 
       <div id="audio-controller"></div>
 
@@ -494,7 +461,7 @@ export default function HomePage() {
                     )}
                 </div>
 
-                {/* API Key Section - FIXED STYLING */}
+                {/* API Key Section */}
                 <div style={{textAlign: 'right'}}>
                     <div style={{color: 'gold', fontWeight: 'bold', marginBottom: 5}}>🔑 מפתח אישי (למשחק מותאם אישית)</div>
                     <div style={{fontSize: '0.8rem', color: '#ccc', marginBottom: 10}}>
