@@ -923,7 +923,7 @@ input:checked + .slider:before { transform: translateX(20px); }
 
 /* למסכים ממש נמוכים (כמו אייפון SE או כשיש מקלדת פתוחה) */
 @media (max-height: 700px) {
-    .game-title { font-size: 1.8rem; margin-bottom: 2px; }
+    .game-title { font-size: 2.8rem; margin-bottom: 5px; }
     .subtitle { display: none; } /* מסתיר תת כותרת כדי לחסוך מקום */
     .btn { padding: 8px 12px; font-size: 0.9rem; margin: 3px 0; }
     .daily-challenge-card { margin-bottom: 5px; padding: 5px; }
