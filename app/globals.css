@@ -1,3 +1,5 @@
+/* trivia-rush\app\globals.css */
+
 :root {
     --primary: #7000ff;
     --secondary: #00f0ff;
@@ -78,27 +80,25 @@ body.theme-gold {
 }
 
 /* --- CUSTOM SCROLLBAR (עיצוב סרגל גלילה משופר) --- */
-/* תמיכה ב-Firefox */
 * {
     scrollbar-width: thin;
     scrollbar-color: var(--primary) transparent;
 }
 
-/* תמיכה ב-Chrome, Edge, Safari */
 ::-webkit-scrollbar {
-    width: 12px; /* מעט רחב יותר כדי לתת מקום לריווח */
+    width: 12px;
 }
 
 ::-webkit-scrollbar-track {
-    background: rgba(0, 0, 0, 0.1); /* רקע כמעט שקוף */
+    background: rgba(0, 0, 0, 0.1);
     border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb {
-    background-color: var(--primary); /* צבע הגולל */
-    border-radius: 20px; /* פינות עגולות לגמרי */
-    border: 3px solid transparent; /* הטריק: גבול שקוף שיוצר את המרווח */
-    background-clip: content-box; /* גורם לרקע להופיע רק בתוכן ולא בגבול */
+    background-color: var(--primary);
+    border-radius: 20px;
+    border: 3px solid transparent;
+    background-clip: content-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
@@ -159,7 +159,7 @@ body {
     align-items: center;
     justify-content: center;
     background-image: radial-gradient(circle at 50% 50%, #1a1a2e 0%, #000000 100%);
-    transition: background 0.5s, color 0.5s; 
+    transition: background 0.5s, color 0.5s;
 }
 
 .screen {
@@ -328,7 +328,7 @@ body {
     border-radius: 50%;
 }
 
-input:checked + .slider { background-color: #4285F4; } 
+input:checked + .slider { background-color: #4285F4; }
 input:checked + .slider:before { transform: translateX(26px); }
 
 /* רשימת מקורות במסך טעינה */
@@ -366,18 +366,20 @@ input:checked + .slider:before { transform: translateX(26px); }
 
 .game-title {
     font-family: 'Rubik Glitch', sans-serif;
-    font-size: 4rem;
+    font-size: 3.5rem; /* הוקטן מעט */
     color: var(--secondary);
     text-shadow: 0 0 20px var(--primary);
     margin-bottom: 10px;
     animation: pulse-glow 2s ease-in-out infinite alternate;
-    line-height: 1;
+    line-height: 1.1;
+    padding: 0 10px; /* ריווח מהצדדים במובייל */
 }
 
 .subtitle {
-    font-size: 1.2rem;
+    font-size: 1.1rem;
     color: var(--text-muted);
-    margin-bottom: 40px;
+    margin-bottom: 30px;
+    padding: 0 10px;
 }
 
 /* מסך משחק */
@@ -449,17 +451,40 @@ input:checked + .slider:before { transform: translateX(26px); }
 }
 
 .question-text {
-    font-size: 1.3rem;
+    font-size: 1.4rem; /* טיפה גדול יותר */
     font-weight: bold;
     text-align: center;
-    margin-bottom: 20px;
+    margin-bottom: 25px;
     line-height: 1.3;
 }
 
+/* --- עדכון הגריד לתשובות --- */
 .options-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
+    gap: 12px;
+    width: 100%;
+}
+
+/* למסכים גדולים: 3 אפשרויות בשורה */
+@media (min-width: 601px) {
+    .options-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+    /* נכון/לא נכון תמיד 2 */
+    .options-grid.two-options {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+/* למובייל: אחד מתחת לשני */
+@media (max-width: 600px) {
+    .options-grid {
+        grid-template-columns: 1fr;
+    }
+    /* במובייל, נכון/לא נכון יכולים להיות זה לצד זה אם רוצים, אבל ביקשת אחד מתחת לשני */
+    .options-grid.two-options {
+        grid-template-columns: 1fr; 
+    }
 }
 
 .option-btn {
@@ -468,11 +493,14 @@ input:checked + .slider:before { transform: translateX(26px); }
     padding: 15px;
     border-radius: 10px;
     color: white;
-    font-size: 1rem;
+    font-size: 1.1rem;
     cursor: pointer;
     transition: all 0.2s;
-    text-align: right;
+    text-align: center; /* מרכוז */
     position: relative;
+    display: flex; /* לשיפור מרכוז */
+    align-items: center;
+    justify-content: center;
 }
 
 .option-btn:hover:not(:disabled) {
@@ -722,10 +750,10 @@ input:checked + .slider:before { transform: translateX(26px); }
 .achievement-icon { font-size: 1.5rem; }
 
 .leaderboard-item {
-    display: flex; 
-    justify-content: space-between; 
+    display: flex;
+    justify-content: space-between;
     align-items: center;
-    border-bottom: 1px solid #333; 
+    border-bottom: 1px solid #333;
     padding: 12px;
     cursor: pointer;
     transition: background 0.2s;
@@ -754,7 +782,7 @@ input:checked + .slider:before { transform: translateX(26px); }
 
 /* רספונסיביות */
 @media (max-width: 480px) {
-    .game-title { font-size: 3rem; }
+    .game-title { font-size: 2.5rem; } /* תיקון כותרת למובייל */
     .options-grid { grid-template-columns: 1fr; }
     .btn { width: 100%; }
     .name-input { width: 100%; }

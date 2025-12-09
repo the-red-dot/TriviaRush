@@ -221,14 +221,14 @@ export default function HomePage() {
           
           if (res.ok && data.success) {
               if (data.message === 'Activated') {
-                   // Item was already owned, just activated
-                   if (itemId.startsWith('theme_')) applyTheme(itemId);
-                   alert('פריט הופעל בהצלחה! ✨');
+                    // Item was already owned, just activated
+                    if (itemId.startsWith('theme_')) applyTheme(itemId);
+                    alert('פריט הופעל בהצלחה! ✨');
               } else {
-                   // Item bought
-                   setUserBalance(data.newBalance);
-                   if(itemId === 'retry_pass') setHasRetryPass(true);
-                   alert('רכישה בוצעה בהצלחה! 🛍️');
+                    // Item bought
+                    setUserBalance(data.newBalance);
+                    if(itemId === 'retry_pass') setHasRetryPass(true);
+                    alert('רכישה בוצעה בהצלחה! 🛍️');
               }
               // Refresh full state
               fetchUserShopData(userId);
@@ -348,18 +348,14 @@ export default function HomePage() {
                                     </div>
                                     <div style={{fontWeight:'bold'}}>₪5,000</div>
                                 </div>
-                                {/* Logic: 
-                                    If attempts >= 2: Completed max for today.
-                                    If attempts < 2 AND hasRetryPass: Already bought, waiting to use.
-                                    Else: Can buy.
-                                */}
+                                
                                 {dailyAttempts >= 2 ? (
                                     <button className="btn" disabled style={{background: '#555', cursor: 'not-allowed', opacity: 0.7}}>
-                                         🚫 השתמשת בכל הניסיונות להיום
+                                            🚫 השתמשת בכל הניסיונות להיום
                                     </button>
                                 ) : hasRetryPass ? (
                                     <button className="btn" disabled style={{background: 'var(--success)', cursor: 'default', opacity: 1}}>
-                                        ✅ יש לך כרטיס (פנוי לשימוש)
+                                            ✅ יש לך כרטיס (פנוי לשימוש)
                                     </button>
                                 ) : (
                                     <button 
@@ -395,7 +391,6 @@ export default function HomePage() {
                                 {id: 'theme_retro', name: 'רטרו ניאון', price: 2500, desc: 'אווירת שנות ה-80'},
                                 {id: 'theme_gold', name: 'יוקרה', price: 2500, desc: 'שחור וזהב'}
                             ].map(item => {
-                                // Default is always owned
                                 const isOwned = inventory.includes(item.id) || item.id === 'theme_default';
                                 const isActive = activeTheme === item.id || (activeTheme === 'default' && item.id === 'theme_default');
                                 
@@ -640,164 +635,166 @@ export default function HomePage() {
       </div>
 
       {/* Main Menu */}
-      <div id="menu-screen" className="screen active">
-        <div className="menu-top-bar" style={{justifyContent: 'space-between', paddingLeft: 15}}>
-            {/* New Shop Button (Left) */}
-            <button 
-                className="btn-icon-small" 
-                onClick={() => setShowMainShopModal(true)}
-                style={{borderColor: 'gold', color: 'gold'}}
-            >
-                <i data-lucide="shopping-bag" />
-            </button>
+      <div id="menu-screen" className="screen active" style={{ overflowY: 'auto' }}>
+        <div style={{width: '100%', maxWidth: '600px', display: 'flex', flexDirection: 'column', alignItems: 'center', margin: 'auto'}}>
+            <div className="menu-top-bar" style={{justifyContent: 'space-between', paddingLeft: 15}}>
+                {/* New Shop Button (Left) */}
+                <button 
+                    className="btn-icon-small" 
+                    onClick={() => setShowMainShopModal(true)}
+                    style={{borderColor: 'gold', color: 'gold'}}
+                >
+                    <i data-lucide="shopping-bag" />
+                </button>
 
-            {/* Profile Button (Right) */}
-            <button className="btn-icon-small" onClick={() => setShowAuthModal(true)} style={{borderColor: userEmail ? 'var(--success)' : 'rgba(255,255,255,0.3)'}}>
-                <i data-lucide={userEmail ? "user-check" : "user"} />{userEmail && <span className="status-dot"></span>}
-            </button>
-        </div>
-
-        <div className="game-title">מירוץ הידע</div>
-        <div className="subtitle">הזמן הוא הכסף שלך. אל תבזבז אותו.</div>
-
-        <input
-          type="text"
-          id="player-name-input"
-          className="name-input"
-          placeholder="הכנס את שמך..."
-          maxLength={15}
-        />
-
-        {/* --- DAILY CHALLENGE SECTION (UPDATED) --- */}
-        <div style={{background: 'linear-gradient(135deg, rgba(255,215,0,0.1), rgba(255,140,0,0.1))', padding: '15px', borderRadius: '15px', marginBottom: '20px', border: '1px solid rgba(255,215,0,0.3)', width: '100%', maxWidth: '500px', textAlign: 'center'}}>
-            <div style={{color:'gold', fontWeight:'bold', marginBottom:'5px', fontSize:'1.1rem'}}>📅 האתגר היומי</div>
-            
-            {dailyStatus && dailyStatus.status !== 'complete' ? (
-                // --- מצב טעינה / בנייה ---
-                <div style={{marginBottom: '10px'}}>
-                    <div style={{fontSize:'0.9rem', color:'#aaa', marginBottom:'5px'}}>
-                        {dailyStatus.status === 'not_started' ? 'ממתין לתחילת יצירה...' : 'בונה את מאגר השאלות לחצות...'}
-                    </div>
-                    <div style={{width: '100%', height: '10px', background: 'rgba(255,255,255,0.1)', borderRadius: '5px', overflow: 'hidden', position: 'relative'}}>
-                        <div style={{width: `${(dailyStatus.progress / dailyStatus.total) * 100}%`, height: '100%', background: 'linear-gradient(90deg, var(--primary), var(--secondary))', transition: 'width 0.5s ease-in-out'}} />
-                    </div>
-                    <div style={{fontSize:'0.8rem', color:'var(--text-muted)', marginTop:'5px', display:'flex', justifyContent:'space-between'}}>
-                        <span>סטטוס: {dailyStatus.currentBatch ? `נגלה ${dailyStatus.currentBatch}/3` : 'ממתין'}</span>
-                        <span>{dailyStatus.progress}/{dailyStatus.total} שאלות</span>
-                    </div>
-                </div>
-            ) : (
-                // --- מצב מוכן ---
-                <div style={{fontSize:'0.9rem', color:'#ddd', marginBottom:'10px'}}>
-                    101 שאלות ב-33 נושאים שונים. כולם מקבלים את אותו אתגר!
-                </div>
-            )}
-
-            <div style={{fontSize:'0.8rem', color:'var(--text-muted)', marginBottom:'10px'}}>
-                אתגר חדש בעוד: <span style={{fontFamily:'monospace', color:'var(--success)', fontWeight:'bold'}}>{timeToNextChallenge}</span>
+                {/* Profile Button (Right) */}
+                <button className="btn-icon-small" onClick={() => setShowAuthModal(true)} style={{borderColor: userEmail ? 'var(--success)' : 'rgba(255,255,255,0.3)'}}>
+                    <i data-lucide={userEmail ? "user-check" : "user"} />{userEmail && <span className="status-dot"></span>}
+                </button>
             </div>
-            
-            <button 
-                className="btn" 
-                style={{
-                    background: 'linear-gradient(135deg, #FFD700, #FF8C00)', 
-                    color:'black', 
-                    width:'100%', 
-                    marginBottom:0,
-                    opacity: dailyStatus?.status !== 'complete' ? 0.6 : 1,
-                    cursor: dailyStatus?.status !== 'complete' ? 'not-allowed' : 'pointer'
-                }}
-                disabled={dailyStatus?.status !== 'complete'}
-                onClick={handleStartDaily}
-            >
-                {dailyStatus?.status !== 'complete' ? (
-                    <span><i data-lucide="loader" /> מכין שאלות...</span>
-                ) : (
-                    <span><i data-lucide="star" /> שחק באתגר היומי</span>
-                )}
-            </button>
-        </div>
 
-        {/* Custom topics Section - CLEANED UP OVERLAY */}
-        <div className="custom-topics-container">
-          
-          <div className="input-group">
+            <div className="game-title">מירוץ הידע</div>
+            <div className="subtitle">הזמן הוא הכסף שלך. אל תבזבז אותו.</div>
+
             <input
-              type="text"
-              id="custom-topic-input"
-              className="name-input"
-              placeholder="נושא מותאם אישית..."
-              style={{
-                marginBottom: 0,
-                width: '70%',
-                borderRadius: '0 12px 12px 0',
-                textAlign: 'right',
-                paddingRight: 15,
-              }}
+            type="text"
+            id="player-name-input"
+            className="name-input"
+            placeholder="הכנס את שמך..."
+            maxLength={15}
             />
-            <button
-              className="btn"
-              style={{
-                margin: 0,
-                width: '30%',
-                borderRadius: '12px 0 0 12px',
-                padding: 10,
-              }}
-              onClick={() => window.addCustomTopic && window.addCustomTopic()}
-            >
-              <i data-lucide="plus" /> הוסף
-            </button>
-          </div>
-          <div id="custom-topics-list" className="topics-list" />
-          
-          <div className="google-toggle-container" style={{marginTop: 10}}>
-            <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                חיפוש בגוגל
-            </span>
-            <label className="switch">
+
+            {/* --- DAILY CHALLENGE SECTION (UPDATED) --- */}
+            <div style={{background: 'linear-gradient(135deg, rgba(255,215,0,0.1), rgba(255,140,0,0.1))', padding: '15px', borderRadius: '15px', marginBottom: '20px', border: '1px solid rgba(255,215,0,0.3)', width: '100%', maxWidth: '500px', textAlign: 'center'}}>
+                <div style={{color:'gold', fontWeight:'bold', marginBottom:'5px', fontSize:'1.1rem'}}>📅 האתגר היומי</div>
+                
+                {dailyStatus && dailyStatus.status !== 'complete' ? (
+                    // --- מצב טעינה / בנייה ---
+                    <div style={{marginBottom: '10px'}}>
+                        <div style={{fontSize:'0.9rem', color:'#aaa', marginBottom:'5px'}}>
+                            {dailyStatus.status === 'not_started' ? 'ממתין לתחילת יצירה...' : 'בונה את מאגר השאלות לחצות...'}
+                        </div>
+                        <div style={{width: '100%', height: '10px', background: 'rgba(255,255,255,0.1)', borderRadius: '5px', overflow: 'hidden', position: 'relative'}}>
+                            <div style={{width: `${(dailyStatus.progress / dailyStatus.total) * 100}%`, height: '100%', background: 'linear-gradient(90deg, var(--primary), var(--secondary))', transition: 'width 0.5s ease-in-out'}} />
+                        </div>
+                        <div style={{fontSize:'0.8rem', color:'var(--text-muted)', marginTop:'5px', display:'flex', justifyContent:'space-between'}}>
+                            <span>סטטוס: {dailyStatus.currentBatch ? `נגלה ${dailyStatus.currentBatch}/2` : 'ממתין'}</span>
+                            <span>{dailyStatus.progress}/{dailyStatus.total} שאלות</span>
+                        </div>
+                    </div>
+                ) : (
+                    // --- מצב מוכן ---
+                    <div style={{fontSize:'0.9rem', color:'#ddd', marginBottom:'10px'}}>
+                        50 שאלות מאתגרות ב-2 נגלות. כולם מקבלים את אותו אתגר!
+                    </div>
+                )}
+
+                <div style={{fontSize:'0.8rem', color:'var(--text-muted)', marginBottom:'10px'}}>
+                    אתגר חדש בעוד: <span style={{fontFamily:'monospace', color:'var(--success)', fontWeight:'bold'}}>{timeToNextChallenge}</span>
+                </div>
+                
+                <button 
+                    className="btn" 
+                    style={{
+                        background: 'linear-gradient(135deg, #FFD700, #FF8C00)', 
+                        color:'black', 
+                        width:'100%', 
+                        marginBottom:0,
+                        opacity: dailyStatus?.status !== 'complete' ? 0.6 : 1,
+                        cursor: dailyStatus?.status !== 'complete' ? 'not-allowed' : 'pointer'
+                    }}
+                    disabled={dailyStatus?.status !== 'complete'}
+                    onClick={handleStartDaily}
+                >
+                    {dailyStatus?.status !== 'complete' ? (
+                        <span><i data-lucide="loader" /> מכין שאלות...</span>
+                    ) : (
+                        <span><i data-lucide="star" /> שחק באתגר היומי</span>
+                    )}
+                </button>
+            </div>
+
+            {/* Custom topics Section */}
+            <div className="custom-topics-container">
+            
+            <div className="input-group">
                 <input
-                type="checkbox"
-                id="google-search-toggle"
-                onChange={() =>
-                    window.toggleGoogleSearch && window.toggleGoogleSearch()
-                }
+                type="text"
+                id="custom-topic-input"
+                className="name-input"
+                placeholder="נושא מותאם אישית..."
+                style={{
+                    marginBottom: 0,
+                    width: '70%',
+                    borderRadius: '0 12px 12px 0',
+                    textAlign: 'right',
+                    paddingRight: 15,
+                }}
                 />
-                <span className="slider" />
-            </label>
-          </div>
+                <button
+                className="btn"
+                style={{
+                    margin: 0,
+                    width: '30%',
+                    borderRadius: '12px 0 0 12px',
+                    padding: 10,
+                }}
+                onClick={() => window.addCustomTopic && window.addCustomTopic()}
+                >
+                <i data-lucide="plus" /> הוסף
+                </button>
+            </div>
+            <div id="custom-topics-list" className="topics-list" />
+            
+            <div className="google-toggle-container" style={{marginTop: 10}}>
+                <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                    חיפוש בגוגל
+                </span>
+                <label className="switch">
+                    <input
+                    type="checkbox"
+                    id="google-search-toggle"
+                    onChange={() =>
+                        window.toggleGoogleSearch && window.toggleGoogleSearch()
+                    }
+                    />
+                    <span className="slider" />
+                </label>
+            </div>
 
-          <button
-            className="btn"
-            onClick={handleCustomGameStart}
-            style={{marginTop: 10, width: '100%', justifyContent: 'center'}}
-          >
-            <i data-lucide="play" /> התחל משחק מותאם
-          </button>
-        </div>
-
-        <div style={{display:'flex', gap: 10, width: '100%', maxWidth: 500, marginTop: 20}}>
             <button
-            className="btn btn-outline"
-            style={{flex: 1}}
-            onClick={() =>
-                window.openLeaderboard && window.openLeaderboard('daily')
-            }
+                className="btn"
+                onClick={handleCustomGameStart}
+                style={{marginTop: 10, width: '100%', justifyContent: 'center'}}
             >
-            <i data-lucide="trophy" /> הישגים ושיאים
+                <i data-lucide="play" /> התחל משחק מותאם
             </button>
-            <button
-            className="btn btn-outline"
-            style={{flex: 1}}
-            onClick={() =>
-                window.openInstructions && window.openInstructions()
-            }
-            >
-            <i data-lucide="book-open" /> הוראות
-            </button>
-        </div>
+            </div>
 
-        <div style={{ marginTop: 30, fontSize: '0.8rem', color: '#555' }}>
-          מופעל ע&quot;י Gemini AI
+            <div style={{display:'flex', gap: 10, width: '100%', maxWidth: 500, marginTop: 20}}>
+                <button
+                className="btn btn-outline"
+                style={{flex: 1}}
+                onClick={() =>
+                    window.openLeaderboard && window.openLeaderboard('daily')
+                }
+                >
+                <i data-lucide="trophy" /> הישגים ושיאים
+                </button>
+                <button
+                className="btn btn-outline"
+                style={{flex: 1}}
+                onClick={() =>
+                    window.openInstructions && window.openInstructions()
+                }
+                >
+                <i data-lucide="book-open" /> הוראות
+                </button>
+            </div>
+
+            <div style={{ marginTop: 30, fontSize: '0.8rem', color: '#555', paddingBottom: '20px' }}>
+                מופעל ע&quot;י Gemini AI
+            </div>
         </div>
       </div>
 
@@ -843,7 +840,7 @@ export default function HomePage() {
           <div className="timer-bar" id="timer-bar" />
         </div>
         <div className="progress-text" id="stage-progress">
-          שאלה 1 מתוך 10
+          שאלה 1 מתוך 50
         </div>
 
         <div className="question-card">

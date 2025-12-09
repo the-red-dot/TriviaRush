@@ -1,12 +1,14 @@
+// trivia-rush\public\game.js
+
 (function () {
   const GAME_CONFIG = {
-    initialTime: 60, // עודכן ל-60 שניות
+    initialTime: 60,
     baseMoney: 100,
     moneyMultiplier: 1.5,
     timeBonusBase: 8,
     timePenaltyBase: 3,
-    questionsPerStage: 10,
-    fetchBatchSize: 30,
+    questionsPerStage: 5, // 50 שאלות / 10 שלבים = 5
+    fetchBatchSize: 25, // מותאם לנגלות החדשות
     fetchBuffer: 5,
     randomSubjectsCount: 8,
     scorePerCorrectForRanking: 500,
@@ -15,17 +17,17 @@
       time_big: 200,
       lifelines: 300,
     },
-    dailyStagesDistribution: [25, 22, 20, 18, 16],
+    // חלוקה ל-10 שלבים, 5 בכל שלב = 50 סה"כ
+    dailyStagesDistribution: [5, 5, 5, 5, 5, 5, 5, 5, 5, 5],
   };
 
   const ACHIEVEMENTS_LIST = [
     // --- Knowledge & Persistence ---
     { id: 'first_step', icon: '👶', title: 'צעד ראשון', desc: 'ענית נכון על השאלה הראשונה' },
     { id: 'student', icon: '✏️', title: 'תלמיד מצטיין', desc: '10 תשובות נכונות במשחק אחד' },
-    { id: 'scholar', icon: '🎓', title: 'מלומד', desc: '25 תשובות נכונות במשחק אחד' },
-    { id: 'bookworm', icon: '📚', title: 'תולעת ספרים', desc: '50 תשובות נכונות במשחק אחד' },
-    { id: 'professor', icon: '🏫', title: 'פרופסור', desc: '80 תשובות נכונות במשחק אחד' },
-    { id: 'encyclopedia', icon: '🧠', title: 'אנציקלופדיה', desc: '100 תשובות נכונות במשחק אחד' },
+    { id: 'scholar', icon: '🎓', title: 'מלומד', desc: '20 תשובות נכונות במשחק אחד' },
+    { id: 'professor', icon: '🏫', title: 'פרופסור', desc: '35 תשובות נכונות במשחק אחד' },
+    { id: 'encyclopedia', icon: '🧠', title: 'אנציקלופדיה', desc: '50 תשובות נכונות במשחק אחד' },
 
     // --- Stages ---
     { id: 'stage_3', icon: '🥉', title: 'מתחילים להתחמם', desc: 'הגעת לשלב 3' },
@@ -65,7 +67,7 @@
     isPlaying: false,
     isDailyMode: false,
     playerName: 'אורח',
-    timeLeft: 60, // עודכן ל-60
+    timeLeft: 60,
     score: 0,
     stage: 1,
     totalCorrect: 0,
@@ -208,33 +210,28 @@
     return array;
   }
 
-  // --- UPDATED VALIDATION FOR 2+ OPTIONS ---
+  // עדכון ולידציה לתמיכה ב-2 ו-3 אפשרויות
   function isValidQuestion(q) {
     if (!q || typeof q !== 'object') return false;
     if (!q.question || typeof q.question !== 'string' || q.question.length < 3) return false;
-    // Allow 2 options (True/False) or more
-    if (!Array.isArray(q.options) || q.options.length < 2) return false; 
+    // אפשר 2 (נכון/לא נכון) או 3
+    if (!Array.isArray(q.options) || q.options.length < 2 || q.options.length > 3) return false;
     if (q.options.some(opt => !opt || typeof opt !== 'string' || opt.trim().length === 0)) return false;
-    // Dynamic index check based on options length
-    if (typeof q.correctIndex !== 'number' || q.correctIndex < 0 || q.correctIndex >= q.options.length) return false; 
+    if (typeof q.correctIndex !== 'number' || q.correctIndex < 0 || q.correctIndex >= q.options.length) return false;
     if (!q.category || typeof q.category !== 'string') return false;
     return true;
   }
 
-  // --- פונקציה מעודכנת ליצירת זוויות חכמות ומגוונות ---
   function generateSmartAngles(topics) {
     const hasTopics = topics && topics.length > 0;
     const context = hasTopics ? `הקשורות לנושאים: ${topics.join(', ')}` : 'בנושאים כלליים ומגוונים';
 
     return [
-      `צור שאלת "איזו מהעובדות הבאות נכונה/לא נכונה" ${context}. הקפד על עובדות לא בנאליות.`,
-      `נסח את השאלה כחידת היגיון או חידה מחשבתית ${context}.`,
-      `התמקד בפרטים נישתיים, עובדות נדירות או מידע שרק מומחים יודעים ${context}.`,
-      `שאל על מקורות, היסטוריה רחוקה או אטימולוגיה ${context}.`,
-      `חפש שיאים, נתונים מספריים קיצוניים או סטטיסטיקות מפתיעות ${context}.`,
-      `התמקד בניפוץ מיתוסים נפוצים או טעויות רווחות ${context}.`,
-      `צור שאלה בסגנון "יוצא דופן" (מי לא שייך לרשימה) ${context}.`,
-      `שאל שאלה הדורשת ידע מעמיק ולא שטחי ${context}, המנע מהמובן מאליו.`
+      `צור שאלת "נכון או לא נכון" קצרה ${context}.`,
+      `נסח חידת היגיון קצרה במשפט אחד ${context}.`,
+      `שאל על עובדה נדירה במשפט אחד קצר ${context}.`,
+      `שאל "מה יוצא דופן?" עם 3 אפשרויות קצרות ${context}.`,
+      `שאלת ידע כללי קלאסית וקצרה ${context}.`
     ];
   }
 
@@ -243,8 +240,6 @@
 
     const totalToFetch = count + GAME_CONFIG.fetchBuffer;
     const maxRetries = 3;
-
-    // כאן אנו קוראים לפונקציה החדשה במקום להשתמש במערך הסטטי
     const possibleAngles = generateSmartAngles(state.customTopics);
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -255,49 +250,44 @@
 
       if (state.customTopics.length > 0) {
         promptContext = `
-          המשתמש ביקש שאלות בנושאים הבאים: ${state.customTopics.join(', ')}.
-          עליך ליצור ${totalToFetch} שאלות.
+          המשתמש ביקש שאלות בנושאים: ${state.customTopics.join(', ')}.
           הנחיות:
           1. השאלות חייבות להיות קשורות לנושאים הללו.
-          2. חובה לערבב בין הנושאים.
-          3. זווית כתיבה: ${currentAngle}.
+          2. ערבב בין הנושאים.
+          3. זווית: ${currentAngle}.
         `;
         if (state.useGoogle) {
-          promptContext += `
-            4. השתמש בחיפוש Google למציאת מידע עדכני ומדויק.
-          `;
+          promptContext += ` 4. השתמש בחיפוש Google למידע עדכני.`;
         }
       } else {
-        promptContext = `צור שאלות כלליות מעניינות ומגוונות. זווית כתיבה: ${currentAngle}.`;
+        promptContext = `צור שאלות כלליות. זווית: ${currentAngle}.`;
       }
 
       let difficulty;
-      if (currentStage === 1) difficulty = 'קל מאוד';
-      else if (currentStage === 2) difficulty = 'קל';
+      if (currentStage === 1) difficulty = 'קל';
       else if (currentStage <= 5) difficulty = 'בינוני';
-      else if (currentStage <= 8) difficulty = 'קשה';
-      else difficulty = 'קשה מאוד (אכזרי)';
+      else difficulty = 'קשה';
 
       const prompt = `
-        אתה מנוע טריוויה דינמי.
-        Seed: ${randomSeed}.
-        
-        משימה: צור ${totalToFetch} שאלות טריוויה בעברית.
+        אתה מנוע טריוויה למשחק מהיר. Seed: ${randomSeed}.
+        משימה: צור ${totalToFetch} שאלות בעברית.
         ${promptContext}
 
-        הנחיות קריטיות:
-        - רמת קושי: **${difficulty}**.
-        - הפלט חייב להיות **JSON בלבד**.
-        - אם יש מרכאות (") בתוך הטקסט, שים לוכסן (escape).
-        
-        החזר אך ורק את ה-JSON הבא:
+        הנחיות קריטיות (חובה):
+        1. שאלה: קצרה מאוד! עד 15 מילים. שורה אחת עד אחד וחצי גג.
+        2. תשובות: קצרות מאוד! 1-4 מילים בלבד.
+        3. כמות אפשרויות: 
+           - שאלת "נכון/לא נכון": בדיוק 2 אפשרויות.
+           - שאלה רגילה: בדיוק 3 אפשרויות.
+        4. רמת קושי: ${difficulty}.
+
+        פלט JSON בלבד:
         [
           {
-            "question": "שאלה",
-            "options": ["תשובה1", "תשובה2", "תשובה3", "תשובה4"],
+            "question": "שאלה קצרה",
+            "options": ["תשובה1", "תשובה2", "תשובה3"],
             "correctIndex": 0,
-            "hint": "רמז",
-            "category": "שם הקטגוריה"
+            "category": "קטגוריה"
           }
         ]
       `;
@@ -362,11 +352,11 @@
     }
 
     return Array.from({ length: count }, (_, i) => ({
-      question: `שגיאה בטעינת שאלה ${i + 1}`,
-      options: ['תקלה', 'בחיבור', 'לשרת', 'ה-AI'],
+      question: `שגיאה בטעינה ${i + 1}`,
+      options: ['נסה', 'שוב', 'מאוחר יותר'],
       correctIndex: 0,
       category: 'שגיאה',
-      hint: 'בדוק מפתח API',
+      hint: 'API',
     }));
   }
 
@@ -397,13 +387,11 @@
   function checkAchievements() {
     const newUnlocks = [];
     
-    // בדיקות מעודכנות לפי הרשימה החדשה
     if (state.totalCorrect >= 1 && !hasAchievement('first_step')) newUnlocks.push('first_step');
     if (state.totalCorrect >= 10 && !hasAchievement('student')) newUnlocks.push('student');
-    if (state.totalCorrect >= 25 && !hasAchievement('scholar')) newUnlocks.push('scholar');
-    if (state.totalCorrect >= 50 && !hasAchievement('bookworm')) newUnlocks.push('bookworm');
-    if (state.totalCorrect >= 80 && !hasAchievement('professor')) newUnlocks.push('professor');
-    if (state.totalCorrect >= 100 && !hasAchievement('encyclopedia')) newUnlocks.push('encyclopedia');
+    if (state.totalCorrect >= 20 && !hasAchievement('scholar')) newUnlocks.push('scholar');
+    if (state.totalCorrect >= 35 && !hasAchievement('professor')) newUnlocks.push('professor');
+    if (state.totalCorrect >= 50 && !hasAchievement('encyclopedia')) newUnlocks.push('encyclopedia');
 
     if (state.stage >= 3 && !hasAchievement('stage_3')) newUnlocks.push('stage_3');
     if (state.stage >= 5 && !hasAchievement('stage_5')) newUnlocks.push('stage_5');
@@ -420,8 +408,6 @@
     if (state.score >= 25000 && !hasAchievement('businessman')) newUnlocks.push('businessman');
     if (state.score >= 50000 && !hasAchievement('tycoon')) newUnlocks.push('tycoon');
     if (state.score >= 100000 && !hasAchievement('millionaire')) newUnlocks.push('millionaire');
-
-    // הישגי זמן ואחרים נבדקים בלוגיקה של המשחק בזמן אמת
 
     if (newUnlocks.length > 0) {
       newUnlocks.forEach((id) => {
@@ -456,7 +442,7 @@
     resetGameState();
 
     const msgEl = document.getElementById('loading-msg');
-    if (msgEl) msgEl.textContent = 'טוען את האתגר היומי... 📅';
+    if (msgEl) msgEl.textContent = 'טוען את 50 שאלות האתגר היומי... 📅';
 
     try {
       const res = await fetch('/api/daily-challenge');
@@ -464,15 +450,11 @@
       const data = await res.json();
 
       if (data.questions && Array.isArray(data.questions)) {
-        
-        // --- RANDOMIZE QUESTION ORDER ---
-        // ערבוב סדר השאלות כדי שבכל ניסיון השחקן יקבל רצף שונה
         shuffleArray(data.questions);
 
         const processed = data.questions.map(q => {
           if (isValidQuestion(q)) {
             const originalCorrectAnswer = q.options[q.correctIndex];
-            // Options are shuffled here (already implemented)
             shuffleArray(q.options);
             const newCorrectIndex = q.options.indexOf(originalCorrectAnswer);
             q.correctIndex = newCorrectIndex !== -1 ? newCorrectIndex : 0;
@@ -494,7 +476,7 @@
 
     } catch (e) {
       console.error(e);
-      alert('שגיאה בטעינת האתגר היומי (ייתכן ועדיין נבנה). נסה שוב מאוחר יותר.');
+      alert('שגיאה בטעינת האתגר היומי. נסה שוב מאוחר יותר.');
       returnToMenu();
     }
   }
@@ -523,6 +505,12 @@
     state.isDailyMode = false;
     switchScreen('loading-screen');
     resetGameState();
+    
+    const msgEl = document.getElementById('loading-msg');
+    if(msgEl) msgEl.textContent = 'מכין 50 שאלות מותאמות אישית...';
+
+    // בגלל שזה 50 שאלות, אנחנו נטען אותן ב-2 חלקים או הכל אם אפשר.
+    // הקונפיגורציה ב fetchBatchSize היא 25. אז נטען נגלה ראשונה.
     await loadNextBatch();
 
     if (state.questionQueue.length === 0) {
@@ -539,7 +527,7 @@
   }
 
   function startGame() {
-    startCustomGame(); 
+    startCustomGame();
   }
 
   function resetGameState() {
@@ -635,6 +623,7 @@
     requestAnimationFrame(gameLoop);
   }
 
+  // עדכון HUD לדרישה 6: סה"כ שאלות וכמה נענו נכונה
   function updateHUD() {
     const timeDisplay = document.getElementById('time-display');
     const scoreDisplay = document.getElementById('score-display');
@@ -646,19 +635,17 @@
     if (scoreDisplay) scoreDisplay.textContent = state.score.toLocaleString();
     if (stageDisplay) stageDisplay.textContent = String(state.stage);
 
-    let questionsThisStage = GAME_CONFIG.questionsPerStage;
-    if (state.isDailyMode) {
-      const distIndex = Math.min(state.stage - 1, GAME_CONFIG.dailyStagesDistribution.length - 1);
-      questionsThisStage = GAME_CONFIG.dailyStagesDistribution[distIndex];
-    }
-
-    const currentQ = state.questionInStageIndex + 1;
     if (progressText) {
-      if (state.isDailyMode) {
-        progressText.textContent = `שאלה ${currentQ} מתוך ${questionsThisStage} (אתגר יומי)`;
-      } else {
-        progressText.textContent = `שאלה ${currentQ} מתוך ${GAME_CONFIG.questionsPerStage} בשלב ${state.stage}`;
-      }
+       // דרישה 6: "במקום להראות כמה שאלות בכל שלב... כמה סהכ יש וכמה ענה נכונה"
+       // נציג: נכון / סה"כ שאלות במשחק (50)
+       // או כדי לא לבלבל, נציג שאלה נוכחית מתוך 50
+       const totalGameQuestions = 50; 
+       const currentTotalQ = state.globalQuestionIndex + 1;
+       
+       progressText.innerHTML = `
+         שאלה ${currentTotalQ} מתוך ${totalGameQuestions}<br/>
+         <span style="font-size:0.8em; color:var(--success)">תשובות נכונות: ${state.totalCorrect}</span>
+       `;
     }
 
     if (timerBar) {
@@ -687,11 +674,18 @@
       showFloatingText(`שלב ${state.stage}!`, 'general', 'var(--secondary)');
     }
 
+    // בדיקה אם נגמרו השאלות במשחק כולו (50)
+    if (state.globalQuestionIndex >= 50) {
+        gameOver('סיימת את כל 50 השאלות! 🏆');
+        return;
+    }
+
     if (state.questionQueue.length === 0) {
       if (state.isDailyMode) {
         gameOver('סיימת את כל השאלות היומיות! 🏆');
         return;
       }
+      // במשחק מותאם אישית, אם נגמרו בנגלה הראשונה, נטען עוד
       state.isFrozen = true;
       switchScreen('loading-screen');
       loadNextBatch().then(() => {
@@ -710,7 +704,15 @@
     const questionText = document.getElementById('question-text');
     const categoryEl = document.getElementById('question-category');
 
-    if (container) container.innerHTML = '';
+    if (container) {
+        container.innerHTML = '';
+        // הסרת קלאס קיים והוספה בהתאם לכמות האפשרויות
+        container.classList.remove('two-options');
+        if (q.options.length === 2) {
+            container.classList.add('two-options');
+        }
+    }
+    
     if (questionText) questionText.textContent = q.question;
     if (categoryEl) categoryEl.textContent = q.category || 'כללי';
 
@@ -760,17 +762,12 @@
     state.totalCorrect++;
     state.streak++;
 
-    // Speed achievements
     if (reactionTime < 2 && !hasAchievement('quick_draw')) unlockAchievement('quick_draw');
     if (reactionTime < 1.5 && !hasAchievement('sprinter')) unlockAchievement('sprinter');
     
-    // Low time survival achievement
     if (state.timeLeft < 3 && !hasAchievement('phoenix')) unlockAchievement('phoenix');
 
     if (state.timeLeft < 5) state.lowTimeFlag = true;
-    if (state.lowTimeFlag && state.timeLeft > 30) {
-      // Re-adding this generic phoenix achievement if kept
-    }
 
     let moneyReward = Math.floor(
       GAME_CONFIG.baseMoney * Math.pow(GAME_CONFIG.moneyMultiplier, state.stage - 1)
@@ -865,12 +862,25 @@
         if (i !== correctIdx) wrongIndices.push(i);
       });
 
-      for (let i = wrongIndices.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [wrongIndices[i], wrongIndices[j]] = [wrongIndices[j], wrongIndices[i]];
+      // נסתיר אפשרויות עד שיישארו רק 2 (הנכונה ואחת שגויה)
+      // במקרה של 3 אפשרויות: מסתירים 1.
+      // במקרה של 2 אפשרויות: לא עושים כלום או מסתירים 1 (משאיר רק נכון). נניח מסתירים 1.
+      const toHideCount = Math.max(1, wrongIndices.length - 1);
+      
+      // בוחרים רנדומלית את אלו שיוסתרו
+      shuffleArray(wrongIndices);
+      
+      // מסתירים הכל חוץ מאחד שגוי (אז אם יש 2 שגויות, מסתירים 1)
+      // אם יש 3 תשובות סה"כ -> 2 שגויות -> מסתירים 1 -> נשארת 1 שגויה ו-1 נכונה.
+      // אם יש 2 תשובות סה"כ (נכון/לא נכון) -> 1 שגויה -> מסתירים 0? לא הגיוני ב50/50.
+      // לכן 50/50 בשאלות נכון/לא נכון למעשה משאיר רק את התשובה הנכונה (מתנה).
+      
+      const hideLimit = (buttons.length === 2) ? 1 : (buttons.length - 2);
+      
+      for(let i=0; i < hideLimit; i++) {
+         if (buttons[wrongIndices[i]]) buttons[wrongIndices[i]].style.visibility = 'hidden';
       }
-      if (buttons[wrongIndices[0]]) buttons[wrongIndices[0]].style.visibility = 'hidden';
-      if (buttons[wrongIndices[1]]) buttons[wrongIndices[1]].style.visibility = 'hidden';
+
     } else if (type === 'freeze') {
       state.isFrozen = true;
       document.body.style.filter = 'grayscale(80%)';
@@ -888,7 +898,8 @@
       if (confidence > 80) {
         aiText = `🤖 Gemini: "אני ${confidence}% בטוח שזה <b>${correctTxt}</b>."`;
       } else {
-        const wrongIdx = (correctIdx + 1) % 4;
+        // Find a wrong option
+        const wrongIdx = (correctIdx + 1) % state.currentQuestion.options.length;
         const wrongTxt = state.currentQuestion.options[wrongIdx];
         aiText = `🤖 Gemini: "מתלבט בין ${wrongTxt} ל-${correctTxt}... אבל הולך על <b>${correctTxt}</b> (${confidence}%)"`;
       }
@@ -954,9 +965,6 @@
       sound.playCash();
       unlockAchievement('spender');
 
-      // Shopaholic
-      // Need to track purchases per game if we want that achievement to work perfectly
-      
       updateHUD();
       if (btnElement) {
         const originalBg = btnElement.style.background;
@@ -1012,7 +1020,7 @@
 
         highScores.forEach((s, i) => {
           const isAccumulated = type === 'accumulated';
-          const score = s.score || 0; 
+          const score = s.score || 0;
           
           const money = isAccumulated ? (s.total_money || 0) : (s.money || 0);
           const correct = isAccumulated ? (s.total_correct || 0) : (s.correct_count || 0);
@@ -1021,9 +1029,8 @@
           const dateRaw = s.created_at || s.last_played_at;
           const created = dateRaw ? new Date(dateRaw).toLocaleDateString('he-IL') : '';
           const maskedId = s.masked_id ? `(${s.masked_id})` : '';
-          const accumulatedIcon = isAccumulated ? '∑ ' : ''; 
+          const accumulatedIcon = isAccumulated ? '∑ ' : '';
 
-          // COSMETICS LOGIC
           const isGolden = s.golden_name_expires_at && new Date(s.golden_name_expires_at) > new Date();
           const nameClass = isGolden ? 'golden-name' : '';
           const activeFrame = s.active_frame && s.active_frame !== 'none' ? s.active_frame : '';
@@ -1067,7 +1074,6 @@
     backBtn.style.display = 'block';
 
     const score = player.score || 0;
-    // Check if total_* fields exist (accumulated view), otherwise fallback
     const money = player.total_money !== undefined ? player.total_money : (player.money || 0);
     const correct = player.total_correct !== undefined ? player.total_correct : (player.correct_count || 0);
     const wrong = player.total_wrong !== undefined ? player.total_wrong : (player.wrong_count || 0);
@@ -1144,12 +1150,10 @@
     if (stageEl) stageEl.textContent = String(state.stage);
     if (correctEl) correctEl.textContent = String(state.totalCorrect);
 
-    // Achievements checks at game over
     if (state.totalCorrect === (state.totalCorrect + state.totalWrong) && state.totalCorrect > 0 && !hasAchievement('perfect_stage')) {
-       // Note: This logic for perfect_stage is simplified for demo; usually per stage check
+       // logic for perfect_stage
     }
 
-    // Checking last second finish
     if (state.timeLeft < 1 && state.timeLeft > 0 && !hasAchievement('last_second')) {
       unlockAchievement('last_second');
     }

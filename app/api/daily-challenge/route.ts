@@ -23,20 +23,20 @@ export async function GET() {
       .eq('challenge_date', today)
       .single();
 
-    // אם אין רשומה, מחזירים סטטוס התחלתי (ה-Client יראה 0/101)
+    // אם אין רשומה, מחזירים סטטוס התחלתי (ה-Client יראה 0/50)
     if (!challenge) {
       return NextResponse.json({ 
         date: today, 
         status: 'not_started', 
         progress: 0, 
-        total: 101 
+        total: 50 
       });
     }
 
     const questions = challenge.questions || [];
     
     // מנגנון הגנה:
-    // מחזירים את השאלות ללקוח *רק* כשהסטטוס הוא 'complete' (כל 101 השאלות מוכנות).
+    // מחזירים את השאלות ללקוח *רק* כשהסטטוס הוא 'complete' (כל 50 השאלות מוכנות).
     // אם התהליך באמצע, מחזירים מערך ריק כדי למנוע מצב של משחק חלקי.
     const questionsToReturn = challenge.status === 'complete' ? questions : [];
 
@@ -46,7 +46,7 @@ export async function GET() {
       status: challenge.status, // 'pending', 'processing', 'complete'
       currentBatch: challenge.current_batch,
       progress: questions.length,
-      total: 101, // היעד החדש שלנו
+      total: 50, // היעד החדש שלנו: 50 שאלות
       log: challenge.last_log,
       nextBatchAt: challenge.next_batch_at
     });

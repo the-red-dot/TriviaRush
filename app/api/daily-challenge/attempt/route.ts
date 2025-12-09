@@ -9,12 +9,14 @@ export async function POST(req: Request) {
   if (!supabaseServer) return NextResponse.json({ error: 'No DB' }, { status: 500 });
 
   const { userId } = await req.json();
+  // אם אין משתמש, אנחנו מאפשרים (למצב אורח או בדיקה), 
+  // אבל הקליינט לרוב חוסם את זה לפני כן.
   if (!userId) return NextResponse.json({ allowed: true }); 
 
   const today = getIsraelDate();
 
   try {
-    // שליפת סטטוס קיים
+    // שליפת סטטוס קיים להיום
     let { data: dailyStats } = await supabaseServer
       .from('daily_player_stats')
       .select('*')
@@ -22,7 +24,7 @@ export async function POST(req: Request) {
       .eq('play_date', today)
       .single();
 
-    // אם אין רשומה - יוצרים
+    // אם אין רשומה להיום - יוצרים חדשה
     if (!dailyStats) {
       const { data: newStats, error } = await supabaseServer
         .from('daily_player_stats')
@@ -35,17 +37,17 @@ export async function POST(req: Request) {
     }
 
     // --- לוגיקה מעודכנת ---
-    // המקסימום המותר: 1 (רגיל) או 2 (עם כרטיס)
+    // המקסימום המותר: 1 (רגיל) או 2 (אם נרכש כרטיס קאמבק)
     const maxAllowed = dailyStats.has_retry_pass ? 2 : 1;
     
     if (dailyStats.attempts >= maxAllowed) {
       // אם יש לו כרטיס והוא הגיע ל-2, הוא סיים להיום.
-      // אם אין לו כרטיס והוא הגיע ל-1, הוא צריך לקנות.
+      // אם אין לו כרטיס והוא הגיע ל-1, הוא צריך לקנות כרטיס כדי להמשיך.
       const reason = (dailyStats.attempts >= 2) ? 'daily_limit_reached' : 'needs_pass';
       return NextResponse.json({ allowed: false, reason });
     }
 
-    // עדכון מספר הניסיונות (מעלים ב-1)
+    // עדכון מספר הניסיונות (מעלים ב-1) לפני תחילת המשחק
     await supabaseServer
       .from('daily_player_stats')
       .update({ attempts: dailyStats.attempts + 1 })
