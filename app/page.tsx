@@ -636,9 +636,9 @@ export default function HomePage() {
 
       {/* Main Menu */}
       <div id="menu-screen" className="screen active" style={{ overflowY: 'auto' }}>
-        <div style={{width: '100%', maxWidth: '600px', display: 'flex', flexDirection: 'column', alignItems: 'center', margin: 'auto'}}>
-            <div className="menu-top-bar" style={{justifyContent: 'space-between', paddingLeft: 15}}>
-                {/* New Shop Button (Left) */}
+        <div className="main-menu-container"> {/* מחלקה חדשה לסידור במובייל */}
+            <div className="menu-top-bar" style={{justifyContent: 'flex-end', paddingLeft: 15}}>
+                {/* New Shop Button */}
                 <button 
                     className="btn-icon-small" 
                     onClick={() => setShowMainShopModal(true)}
@@ -647,25 +647,27 @@ export default function HomePage() {
                     <i data-lucide="shopping-bag" />
                 </button>
 
-                {/* Profile Button (Right) */}
+                {/* Profile Button */}
                 <button className="btn-icon-small" onClick={() => setShowAuthModal(true)} style={{borderColor: userEmail ? 'var(--success)' : 'rgba(255,255,255,0.3)'}}>
                     <i data-lucide={userEmail ? "user-check" : "user"} />{userEmail && <span className="status-dot"></span>}
                 </button>
             </div>
 
-            <div className="game-title">מירוץ הידע</div>
-            <div className="subtitle">הזמן הוא הכסף שלך. אל תבזבז אותו.</div>
+            <div style={{width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
+                <div className="game-title">מירוץ הידע</div>
+                <div className="subtitle">הזמן הוא הכסף שלך. אל תבזבז אותו.</div>
 
-            <input
-            type="text"
-            id="player-name-input"
-            className="name-input"
-            placeholder="הכנס את שמך..."
-            maxLength={15}
-            />
+                <input
+                type="text"
+                id="player-name-input"
+                className="name-input"
+                placeholder="הכנס את שמך..."
+                maxLength={15}
+                />
+            </div>
 
             {/* --- DAILY CHALLENGE SECTION (UPDATED) --- */}
-            <div style={{background: 'linear-gradient(135deg, rgba(255,215,0,0.1), rgba(255,140,0,0.1))', padding: '15px', borderRadius: '15px', marginBottom: '20px', border: '1px solid rgba(255,215,0,0.3)', width: '100%', maxWidth: '500px', textAlign: 'center'}}>
+            <div className="daily-challenge-card">
                 <div style={{color:'gold', fontWeight:'bold', marginBottom:'5px', fontSize:'1.1rem'}}>📅 האתגר היומי</div>
                 
                 {dailyStatus && dailyStatus.status !== 'complete' ? (
@@ -746,7 +748,7 @@ export default function HomePage() {
             </div>
             <div id="custom-topics-list" className="topics-list" />
             
-            <div className="google-toggle-container" style={{marginTop: 10}}>
+            <div className="google-toggle-container" style={{marginTop: 5}}>
                 <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
                     חיפוש בגוגל
                 </span>
@@ -765,13 +767,13 @@ export default function HomePage() {
             <button
                 className="btn"
                 onClick={handleCustomGameStart}
-                style={{marginTop: 10, width: '100%', justifyContent: 'center'}}
+                style={{marginTop: 5, width: '100%', justifyContent: 'center'}}
             >
                 <i data-lucide="play" /> התחל משחק מותאם
             </button>
             </div>
 
-            <div style={{display:'flex', gap: 10, width: '100%', maxWidth: 500, marginTop: 20}}>
+            <div className="menu-bottom-buttons" style={{display:'flex', gap: 10, width: '90%', maxWidth: 500, marginTop: 10}}>
                 <button
                 className="btn btn-outline"
                 style={{flex: 1}}
@@ -792,7 +794,7 @@ export default function HomePage() {
                 </button>
             </div>
 
-            <div style={{ marginTop: 30, fontSize: '0.8rem', color: '#555', paddingBottom: '20px' }}>
+            <div style={{ marginTop: 15, fontSize: '0.8rem', color: '#555', paddingBottom: '10px' }}>
                 מופעל ע&quot;י Gemini AI
             </div>
         </div>

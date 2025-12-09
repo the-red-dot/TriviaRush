@@ -145,7 +145,9 @@ body.theme-gold {
 html, body {
     margin: 0;
     padding: 0;
-    height: 100%;
+    /* שימוש ב-dvh (Dynamic Viewport Height) לפתרון בעיית שורות הכתובת בנייד */
+    height: 100vh; 
+    height: 100dvh; 
 }
 
 body {
@@ -153,7 +155,6 @@ body {
     background-color: var(--bg-dark);
     color: var(--text-main);
     overflow: hidden;
-    height: 100vh;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -166,7 +167,8 @@ body {
     display: none;
     width: 100%;
     max-width: 600px;
-    height: 100%;
+    /* חשוב: הגובה מתאים את עצמו למסך הדינמי */
+    height: 100%; 
     flex-direction: column;
     padding: 20px;
     position: relative;
@@ -175,6 +177,21 @@ body {
 
 .screen.active {
     display: flex;
+}
+
+/* --- Container לתפריט הראשי --- */
+/* מבטיח שהכל נכנס בלי גלילה ומתחלק יפה לגובה */
+.main-menu-container {
+    width: 100%;
+    max-width: 500px;
+    height: 100%;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-evenly; /* מפזר את האלמנטים בצורה שווה */
+    padding-top: 50px; /* מקום לכפתורים העליונים */
+    padding-bottom: 20px;
 }
 
 .btn {
@@ -227,7 +244,7 @@ body {
     padding: 15px;
     font-size: 1.2rem;
     border-radius: 12px;
-    margin-bottom: 20px;
+    margin-bottom: 10px;
     width: 80%;
     text-align: center;
     font-family: 'Heebo', sans-serif;
@@ -242,8 +259,8 @@ body {
 
 /* סגנונות נושאים מותאמים אישית */
 .custom-topics-container {
-    width: 80%;
-    margin-bottom: 10px;
+    width: 90%;
+    margin-bottom: 5px;
 }
 
 .input-group {
@@ -288,10 +305,10 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-bottom: 20px;
+    margin-bottom: 10px;
     gap: 10px;
     background: rgba(255,255,255,0.05);
-    padding: 10px;
+    padding: 5px 15px;
     border-radius: 30px;
     width: fit-content;
     margin-left: auto;
@@ -301,8 +318,8 @@ body {
 .switch {
     position: relative;
     display: inline-block;
-    width: 50px;
-    height: 24px;
+    width: 40px; /* הוקטן */
+    height: 20px; /* הוקטן */
 }
 
 .switch input { opacity: 0; width: 0; height: 0; }
@@ -319,17 +336,17 @@ body {
 .slider:before {
     position: absolute;
     content: "";
-    height: 16px;
-    width: 16px;
-    left: 4px;
-    bottom: 4px;
+    height: 14px; /* הוקטן */
+    width: 14px; /* הוקטן */
+    left: 3px;
+    bottom: 3px;
     background-color: white;
     transition: .4s;
     border-radius: 50%;
 }
 
 input:checked + .slider { background-color: #4285F4; }
-input:checked + .slider:before { transform: translateX(26px); }
+input:checked + .slider:before { transform: translateX(20px); }
 
 /* רשימת מקורות במסך טעינה */
 #sources-list {
@@ -362,24 +379,37 @@ input:checked + .slider:before { transform: translateX(26px); }
     justify-content: center;
     align-items: center;
     text-align: center;
+    overflow: hidden; /* למנוע גלילה כפולה */
 }
 
 .game-title {
     font-family: 'Rubik Glitch', sans-serif;
-    font-size: 3.5rem; /* הוקטן מעט */
+    font-size: 3.5rem;
     color: var(--secondary);
     text-shadow: 0 0 20px var(--primary);
-    margin-bottom: 10px;
+    margin-bottom: 5px; /* הוקטן */
     animation: pulse-glow 2s ease-in-out infinite alternate;
     line-height: 1.1;
-    padding: 0 10px; /* ריווח מהצדדים במובייל */
+    padding: 0 10px;
 }
 
 .subtitle {
     font-size: 1.1rem;
     color: var(--text-muted);
-    margin-bottom: 30px;
+    margin-bottom: 15px; /* הוקטן */
     padding: 0 10px;
+}
+
+/* כרטיס האתגר היומי */
+.daily-challenge-card {
+    background: linear-gradient(135deg, rgba(255,215,0,0.1), rgba(255,140,0,0.1));
+    padding: 10px; /* הוקטן */
+    border-radius: 15px;
+    margin-bottom: 10px; /* הוקטן */
+    border: 1px solid rgba(255,215,0,0.3);
+    width: 95%;
+    max-width: 500px;
+    text-align: center;
 }
 
 /* מסך משחק */
@@ -451,7 +481,7 @@ input:checked + .slider:before { transform: translateX(26px); }
 }
 
 .question-text {
-    font-size: 1.4rem; /* טיפה גדול יותר */
+    font-size: 1.4rem;
     font-weight: bold;
     text-align: center;
     margin-bottom: 25px;
@@ -465,23 +495,19 @@ input:checked + .slider:before { transform: translateX(26px); }
     width: 100%;
 }
 
-/* למסכים גדולים: 3 אפשרויות בשורה */
 @media (min-width: 601px) {
     .options-grid {
         grid-template-columns: repeat(3, 1fr);
     }
-    /* נכון/לא נכון תמיד 2 */
     .options-grid.two-options {
         grid-template-columns: repeat(2, 1fr);
     }
 }
 
-/* למובייל: אחד מתחת לשני */
 @media (max-width: 600px) {
     .options-grid {
         grid-template-columns: 1fr;
     }
-    /* במובייל, נכון/לא נכון יכולים להיות זה לצד זה אם רוצים, אבל ביקשת אחד מתחת לשני */
     .options-grid.two-options {
         grid-template-columns: 1fr; 
     }
@@ -496,9 +522,9 @@ input:checked + .slider:before { transform: translateX(26px); }
     font-size: 1.1rem;
     cursor: pointer;
     transition: all 0.2s;
-    text-align: center; /* מרכוז */
+    text-align: center;
     position: relative;
-    display: flex; /* לשיפור מרכוז */
+    display: flex;
     align-items: center;
     justify-content: center;
 }
@@ -780,14 +806,6 @@ input:checked + .slider:before { transform: translateX(26px); }
     font-size: 2rem;
 }
 
-/* רספונסיביות */
-@media (max-width: 480px) {
-    .game-title { font-size: 2.5rem; } /* תיקון כותרת למובייל */
-    .options-grid { grid-template-columns: 1fr; }
-    .btn { width: 100%; }
-    .name-input { width: 100%; }
-}
-
 /* New Menu Top Bar */
 .menu-top-bar {
     width: 100%;
@@ -797,6 +815,7 @@ input:checked + .slider:before { transform: translateX(26px); }
     top: 15px;
     right: 15px;
     z-index: 50;
+    gap: 10px; /* רווח בין הכפתורים */
 }
 
 .btn-icon-small {
@@ -834,4 +853,80 @@ input:checked + .slider:before { transform: translateX(26px); }
 /* Authentication Tabs in Modal */
 .auth-tabs button:hover {
     color: white !important;
+}
+
+/* --- רספונסיביות מותאמת אישית לנייד --- */
+@media (max-width: 480px) {
+    .menu-top-bar {
+        /* מוודא שהכפתורים לא נחתכים מלמעלה */
+        top: 10px; 
+        right: 10px;
+    }
+    
+    .btn-icon-small {
+        width: 35px;
+        height: 35px;
+    }
+
+    .main-menu-container {
+        /* ריווח עליון גדול יותר כדי שהכפתורים לא יגעו בטופס */
+        padding-top: 60px; 
+        padding-bottom: 10px;
+    }
+
+    .game-title { 
+        font-size: 2.2rem; /* עוד יותר קטן */
+        margin-bottom: 5px;
+    } 
+    
+    .subtitle {
+        font-size: 0.9rem;
+        margin-bottom: 10px;
+    }
+
+    .name-input { 
+        width: 90%; 
+        padding: 10px; /* פחות ריפוד */
+        font-size: 1rem;
+        margin-bottom: 10px;
+    }
+
+    .btn { 
+        width: 100%; 
+        padding: 10px 15px; /* כפתורים נמוכים יותר */
+        font-size: 1rem;
+        margin: 5px 0;
+    }
+
+    .daily-challenge-card {
+        padding: 8px;
+    }
+
+    .daily-challenge-card div {
+        font-size: 0.8rem;
+    }
+
+    .custom-topics-container {
+        margin-bottom: 5px;
+    }
+    
+    /* מקרב את הכפתורים התחתונים */
+    .menu-bottom-buttons {
+        margin-top: 10px !important;
+    }
+    
+    .google-toggle-container {
+        padding: 2px 10px;
+        margin-bottom: 5px;
+    }
+}
+
+/* למסכים ממש נמוכים (כמו אייפון SE או כשיש מקלדת פתוחה) */
+@media (max-height: 700px) {
+    .game-title { font-size: 1.8rem; margin-bottom: 2px; }
+    .subtitle { display: none; } /* מסתיר תת כותרת כדי לחסוך מקום */
+    .btn { padding: 8px 12px; font-size: 0.9rem; margin: 3px 0; }
+    .daily-challenge-card { margin-bottom: 5px; padding: 5px; }
+    .name-input { padding: 8px; margin-bottom: 5px; }
+    .main-menu-container { padding-top: 40px; }
 }
