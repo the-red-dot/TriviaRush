@@ -3,8 +3,31 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Script from 'next/script';
-import { supabaseBrowser } from '../utils/supabase-browser';
+// import Script from 'next/script'; // Removed to avoid build error
+// import { supabaseBrowser } from '../utils/supabase-browser'; // Removed to avoid build error
+import { createClient } from '@supabase/supabase-js';
+
+// --- Inline Supabase Client Setup (Fixes import error) ---
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabaseBrowser = createClient(supabaseUrl, supabaseAnonKey);
+
+// --- Custom Script Loader Component (Fixes next/script error) ---
+const ScriptLoader = ({ src, onLoad }: { src: string; onLoad?: () => void }) => {
+  useEffect(() => {
+    const script = document.createElement('script');
+    script.src = src;
+    script.async = true;
+    if (onLoad) {
+      script.onload = onLoad;
+    }
+    document.body.appendChild(script);
+    return () => {
+      document.body.removeChild(script);
+    };
+  }, [src, onLoad]);
+  return null;
+};
 
 declare global {
   interface Window {
@@ -42,6 +65,7 @@ export default function HomePage() {
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [authError, setAuthError] = useState<string | null>(null);
+  const [gameScriptLoaded, setGameScriptLoaded] = useState(false);
   
   // Modals
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -65,9 +89,21 @@ export default function HomePage() {
   const [timeToNextChallenge, setTimeToNextChallenge] = useState('');
   const [dailyStatus, setDailyStatus] = useState<any>(null); // סטטוס האתגר היומי
 
+  // Try to init game when script is loaded
   useEffect(() => {
-    // Init Game
-    window.triviaRushInit && window.triviaRushInit();
+    if (gameScriptLoaded && window.triviaRushInit) {
+        window.triviaRushInit();
+    }
+  }, [gameScriptLoaded]);
+
+  useEffect(() => {
+    // Init Game check interval (fallback)
+    const initInterval = setInterval(() => {
+        if (window.triviaRushInit) {
+            window.triviaRushInit();
+            clearInterval(initInterval);
+        }
+    }, 500);
 
     // Check Auth
     supabaseBrowser.auth.getUser().then(({ data }) => {
@@ -99,6 +135,7 @@ export default function HomePage() {
     return () => {
         clearInterval(timerInterval);
         clearInterval(statusInterval);
+        clearInterval(initInterval);
     };
   }, []);
 
@@ -308,15 +345,9 @@ export default function HomePage() {
 
   return (
     <>
-      <Script
-        src="https://unpkg.com/lucide@latest"
-        strategy="beforeInteractive"
-      />
-      <Script
-        src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"
-        strategy="beforeInteractive"
-      />
-      <Script src="/game.js" strategy="afterInteractive" />
+      <ScriptLoader src="https://unpkg.com/lucide@latest" />
+      <ScriptLoader src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js" />
+      <ScriptLoader src="/game.js" onLoad={() => setGameScriptLoaded(true)} />
 
       <div id="audio-controller"></div>
 
@@ -463,7 +494,7 @@ export default function HomePage() {
                     )}
                 </div>
 
-                {/* API Key Section */}
+                {/* API Key Section - FIXED STYLING */}
                 <div style={{textAlign: 'right'}}>
                     <div style={{color: 'gold', fontWeight: 'bold', marginBottom: 5}}>🔑 מפתח אישי (למשחק מותאם אישית)</div>
                     <div style={{fontSize: '0.8rem', color: '#ccc', marginBottom: 10}}>
@@ -480,16 +511,23 @@ export default function HomePage() {
                             </button>
                         </div>
                     ) : (
-                        <div style={{display: 'flex', gap: 5}}>
+                        <div style={{display: 'flex', flexDirection: 'column', gap: 10}}>
                             <input 
                                 type="text" 
                                 placeholder="הדבק כאן את ה-API Key" 
                                 value={apiKeyInput}
                                 onChange={(e) => setApiKeyInput(e.target.value)}
                                 className="name-input"
-                                style={{flex: 1, marginBottom: 0, padding: 8, fontSize: '0.8rem'}}
+                                style={{
+                                    width: '100%', 
+                                    marginBottom: 0, 
+                                    padding: '12px', 
+                                    fontSize: '1rem', 
+                                    textAlign: 'left', 
+                                    direction: 'ltr' 
+                                }}
                             />
-                            <button onClick={saveApiKey} className="btn" style={{padding: '5px 15px', margin: 0, fontSize: '0.9rem'}}>שמור</button>
+                            <button onClick={saveApiKey} className="btn" style={{width: '100%', padding: '10px 0', margin: 0, fontSize: '1rem'}}>שמור</button>
                         </div>
                     )}
                 </div>

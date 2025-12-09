@@ -210,11 +210,9 @@
     return array;
   }
 
-  // עדכון ולידציה לתמיכה ב-2 ו-3 אפשרויות
   function isValidQuestion(q) {
     if (!q || typeof q !== 'object') return false;
     if (!q.question || typeof q.question !== 'string' || q.question.length < 3) return false;
-    // אפשר 2 (נכון/לא נכון) או 3
     if (!Array.isArray(q.options) || q.options.length < 2 || q.options.length > 3) return false;
     if (q.options.some(opt => !opt || typeof opt !== 'string' || opt.trim().length === 0)) return false;
     if (typeof q.correctIndex !== 'number' || q.correctIndex < 0 || q.correctIndex >= q.options.length) return false;
@@ -222,17 +220,9 @@
     return true;
   }
 
+  // פונקציה זו הוסרה מכיוון שהגיוון עבר לפרומפט הראשי, אך נשאיר אותה למקרה הצורך
   function generateSmartAngles(topics) {
-    const hasTopics = topics && topics.length > 0;
-    const context = hasTopics ? `הקשורות לנושאים: ${topics.join(', ')}` : 'בנושאים כלליים ומגוונים';
-
-    return [
-      `צור שאלת "נכון או לא נכון" קצרה ${context}.`,
-      `נסח חידת היגיון קצרה במשפט אחד ${context}.`,
-      `שאל על עובדה נדירה במשפט אחד קצר ${context}.`,
-      `שאל "מה יוצא דופן?" עם 3 אפשרויות קצרות ${context}.`,
-      `שאלת ידע כללי קלאסית וקצרה ${context}.`
-    ];
+    return [];
   }
 
   async function fetchQuestionsFromAI(count, currentStage) {
@@ -240,45 +230,58 @@
 
     const totalToFetch = count + GAME_CONFIG.fetchBuffer;
     const maxRetries = 3;
-    const possibleAngles = generateSmartAngles(state.customTopics);
+    
+    // ביטול מנגנון "זווית יחידה" לטובת גיוון בתוך הפרומפט
+    // const possibleAngles = ... 
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      const currentAngle = possibleAngles[Math.floor(Math.random() * possibleAngles.length)];
       const randomSeed = Math.floor(Math.random() * 999999);
 
+      let topicsText = '';
       let promptContext = '';
 
       if (state.customTopics.length > 0) {
+        topicsText = `הנושאים שנבחרו: ${state.customTopics.join(', ')}.`;
         promptContext = `
           המשתמש ביקש שאלות בנושאים: ${state.customTopics.join(', ')}.
           הנחיות:
           1. השאלות חייבות להיות קשורות לנושאים הללו.
           2. ערבב בין הנושאים.
-          3. זווית: ${currentAngle}.
         `;
         if (state.useGoogle) {
-          promptContext += ` 4. השתמש בחיפוש Google למידע עדכני.`;
+          promptContext += ` 3. השתמש בחיפוש Google למידע עדכני.`;
         }
       } else {
-        promptContext = `צור שאלות כלליות. זווית: ${currentAngle}.`;
+        topicsText = 'נושאים: ידע כללי מגוון.';
+        promptContext = `צור שאלות ידע כללי וטריווויה.`;
       }
 
       let difficulty;
-      if (currentStage === 1) difficulty = 'קל';
+      if (currentStage === 1) difficulty = 'קל-בינוני';
       else if (currentStage <= 5) difficulty = 'בינוני';
-      else difficulty = 'קשה';
+      else difficulty = 'בינוני-קשה';
 
       const prompt = `
-        אתה מנוע טריוויה למשחק מהיר. Seed: ${randomSeed}.
+        אתה מנוע טריוויה למשחק מהיר בסגנון שעשועון טלוויזיה. Seed: ${randomSeed}.
         משימה: צור ${totalToFetch} שאלות בעברית.
         ${promptContext}
 
-        הנחיות קריטיות (חובה):
+        הנחיה חשובה לגיוון (חובה!):
+        עליך ליצור תמהיל מגוון של שאלות ברשימה זו, ולא להיצמד לסוג אחד בלבד!
+        החלוקה המומלצת בתוך ה-${totalToFetch} שאלות:
+        1. שאלות טריוויה קלאסיות (רוב השאלות).
+        2. חידות היגיון קצרות וקלילות.
+        3. עובדות מפתיעות.
+        4. שאלות "נכון או לא נכון" (מקסימום 20% מהשאלות, לא יותר).
+        5. "מה יוצא דופן?" (אופציונלי).
+
+
+        הנחיות טכניות קריטיות (חובה):
         1. שאלה: קצרה מאוד! עד 15 מילים. שורה אחת עד אחד וחצי גג.
         2. תשובות: קצרות מאוד! 1-4 מילים בלבד.
         3. כמות אפשרויות: 
-           - שאלת "נכון/לא נכון": בדיוק 2 אפשרויות.
-           - שאלה רגילה: בדיוק 3 אפשרויות.
+           - לשאלת "נכון/לא נכון": חובה בדיוק 2 אפשרויות ("נכון", "לא נכון").
+           - לכל שאר השאלות: חובה בדיוק 3 אפשרויות.
         4. רמת קושי: ${difficulty}.
 
         פלט JSON בלבד:
@@ -623,7 +626,6 @@
     requestAnimationFrame(gameLoop);
   }
 
-  // עדכון HUD לדרישה 6: סה"כ שאלות וכמה נענו נכונה
   function updateHUD() {
     const timeDisplay = document.getElementById('time-display');
     const scoreDisplay = document.getElementById('score-display');
@@ -636,9 +638,6 @@
     if (stageDisplay) stageDisplay.textContent = String(state.stage);
 
     if (progressText) {
-       // דרישה 6: "במקום להראות כמה שאלות בכל שלב... כמה סהכ יש וכמה ענה נכונה"
-       // נציג: נכון / סה"כ שאלות במשחק (50)
-       // או כדי לא לבלבל, נציג שאלה נוכחית מתוך 50
        const totalGameQuestions = 50; 
        const currentTotalQ = state.globalQuestionIndex + 1;
        
@@ -674,7 +673,6 @@
       showFloatingText(`שלב ${state.stage}!`, 'general', 'var(--secondary)');
     }
 
-    // בדיקה אם נגמרו השאלות במשחק כולו (50)
     if (state.globalQuestionIndex >= 50) {
         gameOver('סיימת את כל 50 השאלות! 🏆');
         return;
@@ -706,7 +704,6 @@
 
     if (container) {
         container.innerHTML = '';
-        // הסרת קלאס קיים והוספה בהתאם לכמות האפשרויות
         container.classList.remove('two-options');
         if (q.options.length === 2) {
             container.classList.add('two-options');
@@ -862,18 +859,8 @@
         if (i !== correctIdx) wrongIndices.push(i);
       });
 
-      // נסתיר אפשרויות עד שיישארו רק 2 (הנכונה ואחת שגויה)
-      // במקרה של 3 אפשרויות: מסתירים 1.
-      // במקרה של 2 אפשרויות: לא עושים כלום או מסתירים 1 (משאיר רק נכון). נניח מסתירים 1.
       const toHideCount = Math.max(1, wrongIndices.length - 1);
-      
-      // בוחרים רנדומלית את אלו שיוסתרו
       shuffleArray(wrongIndices);
-      
-      // מסתירים הכל חוץ מאחד שגוי (אז אם יש 2 שגויות, מסתירים 1)
-      // אם יש 3 תשובות סה"כ -> 2 שגויות -> מסתירים 1 -> נשארת 1 שגויה ו-1 נכונה.
-      // אם יש 2 תשובות סה"כ (נכון/לא נכון) -> 1 שגויה -> מסתירים 0? לא הגיוני ב50/50.
-      // לכן 50/50 בשאלות נכון/לא נכון למעשה משאיר רק את התשובה הנכונה (מתנה).
       
       const hideLimit = (buttons.length === 2) ? 1 : (buttons.length - 2);
       
@@ -898,7 +885,6 @@
       if (confidence > 80) {
         aiText = `🤖 Gemini: "אני ${confidence}% בטוח שזה <b>${correctTxt}</b>."`;
       } else {
-        // Find a wrong option
         const wrongIdx = (correctIdx + 1) % state.currentQuestion.options.length;
         const wrongTxt = state.currentQuestion.options[wrongIdx];
         aiText = `🤖 Gemini: "מתלבט בין ${wrongTxt} ל-${correctTxt}... אבל הולך על <b>${correctTxt}</b> (${confidence}%)"`;
