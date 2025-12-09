@@ -975,7 +975,7 @@ export default function HomePage() {
         <div
           style={{
             background: 'var(--bg-card)',
-            padding: 20,
+            padding: 21,
             borderRadius: 15,
             width: '100%',
             marginBottom: 20,
