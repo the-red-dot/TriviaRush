@@ -72,13 +72,19 @@ function shuffleArray(array: string[]) {
   return arr;
 }
 
-// עדכון ולידציה לאפשר 2 או 3 אפשרויות
+// עדכון ולידציה לאפשר 2 או 3 אפשרויות ולהבטיח שדה difficulty
 function validateAndFixQuestions(questions: any[]): any[] {
   if (!Array.isArray(questions)) return [];
   return questions.filter(q => {
     if (!q || typeof q !== 'object') return false;
     if (typeof q.question !== 'string' || q.question.length < 3) return false;
     if (!q.category) q.category = 'כללי';
+    
+    // וידוא שדה difficulty
+    if (!['easy', 'medium', 'hard'].includes(q.difficulty)) {
+        q.difficulty = 'medium'; // ברירת מחדל
+    }
+
     // אפשרויות: מינימום 2 (נכון/לא נכון), מקסימום 3
     if (!Array.isArray(q.options) || q.options.length < 2 || q.options.length > 3) return false;
     // אינדקס תקין
@@ -199,44 +205,65 @@ export async function GET(req: Request) {
     console.log(`[Cron] Generating Batch ${nextBatchNum} for ${targetDate}. Topics: ${selectedTopics.length}`);
 
     let difficultyInstruction = '';
+    let mixInstruction = '';
     
-    // הנחיות מעודכנות
+    // הנחיות מעודכנות לפי נגלות
     if (nextBatchNum === 1) {
+        // נגלה 1: קל-בינוני
+        // מטרה: 15 easy, 10 medium
         difficultyInstruction = `
-        1. רמת קושי: קלה-בינונית (שאלות טריוויה מהירות).
-        2. שלב שאלות "נכון או לא נכון" (True/False) - חובה לספק 2 אפשרויות בלבד במקרה זה.
-        3. השאלות חייבות להיות קצרות (עד 15 מילים).
-        4. התשובות חייבות להיות קצרות (1-4 מילים).`;
+        הנחיות קריטיות לחלוקת קושי (Difficulty Distribution):
+        עליך לייצר בדיוק:
+        1. 15 שאלות ברמת קושי "easy" (ידע כללי בסיסי, עובדות ידועות).
+        2. 10 שאלות ברמת קושי "medium" (דורש ידע ספציפי יותר).
+        
+        סך הכל: 25 שאלות.`;
+        
+        mixInstruction = `
+        - שלב שאלות "נכון או לא נכון" (בעיקר ב-Easy).
+        - הקפד על שדה "difficulty" שערכו "easy" או "medium" בהתאמה.`;
+
     } else {
+        // נגלה 2: בינוני-קשה
+        // מטרה: 10 medium, 15 hard
         difficultyInstruction = `
-        1. רמת קושי: בינונית-קשה.
-        2. תן עדיפות לעובדות מפתיעות.
-        3. השאלות חייבות להיות קצרות (עד 15 מילים).
-        4. התשובות חייבות להיות קצרות (1-4 מילים).`;
+        הנחיות קריטיות לחלוקת קושי (Difficulty Distribution):
+        עליך לייצר בדיוק:
+        1. 10 שאלות ברמת קושי "medium" (טריוויה מאתגרת).
+        2. 15 שאלות ברמת קושי "hard" (עובדות אזוטריות, פרטים קטנים, חידות היגיון קשות).
+        
+        סך הכל: 25 שאלות.`;
+
+        mixInstruction = `
+        - תן עדיפות לעובדות מפתיעות ומכשילות.
+        - הקפד על שדה "difficulty" שערכו "medium" או "hard" בהתאמה.`;
     }
 
     const prompt = `
-      משימה: צור בדיוק ${selectedTopics.length} שאלות טריוויה בעברית למשחק מהיר (Speed Trivia).
+      משימה: צור בדיוק ${questionsToGenerate} שאלות טריוויה בעברית למשחק מהיר.
       יש ליצור שאלה אחת עבור כל אחד מהנושאים הבאים:
       ${selectedTopics.join(', ')}
 
-      הנחיות קריטיות (חובה):
-      1. השאלה: קצרה מאוד! מקסימום שורה וחצי. בלי הקדמות.
+      ${difficultyInstruction}
+
+      הנחיות טכניות (חובה):
+      1. השאלה: קצרה מאוד! מקסימום שורה וחצי (עד 15 מילים).
       2. התשובות: קצרות מאוד! 1 עד 4 מילים גג.
       3. אפשרויות בחירה:
          - לשאלות רגילות: ספק בדיוק 3 אפשרויות.
-         - לשאלות "נכון/לא נכון": ספק בדיוק 2 אפשרויות (למשל: "נכון", "לא נכון").
-      4. גוון בסוגי השאלות (חלק רגילות, חלק נכון/לא נכון).
-
-      ${difficultyInstruction}
+         - לשאלות "נכון/לא נכון": ספק בדיוק 2 אפשרויות ("נכון", "לא נכון").
+      4. חובה להוסיף שדה "difficulty" לכל שאלה ("easy", "medium", או "hard").
       
-      פלט JSON בלבד:
+      ${mixInstruction}
+      
+      פלט JSON בלבד במבנה הבא:
       [
         {
           "question": "שאלה קצרה...",
-          "options": ["תשובה קצרה", "תשובה קצרה", "תשובה קצרה"],
+          "options": ["תשובה", "תשובה", "תשובה"],
           "correctIndex": 0,
-          "category": "הנושא שנבחר מהרשימה"
+          "category": "נושא",
+          "difficulty": "easy" 
         }
       ]
       חשוב: Escape quotes inside strings.

@@ -5,6 +5,29 @@ function getIsraelDate() {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' });
 }
 
+// פונקציית עזר לחישוב מדויק של חצות (00:00) שעון ישראל במונחי UTC
+// זה מונע את הבאג שבו משחקים בין 00:00 ל-02:00 בלילה לא מופיעים בטבלה היומית
+function getStartOfIsraelDayISO() {
+  const now = new Date();
+  // 1. קבלת התאריך הנוכחי בישראל בפורמט YYYY-MM-DD
+  const ilDateStr = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' });
+  
+  // 2. יצירת אובייקט זמן שמייצג את חצות UTC של אותו תאריך
+  // (למשל: 2025-12-10T00:00:00Z)
+  const midnightUTC = new Date(ilDateStr + 'T00:00:00Z');
+  
+  // 3. חישוב ההפרש בין ישראל ל-UTC באותו יום ספציפי
+  // אם בישראל 02:00 כשאצלנו 00:00 UTC -> שעון חורף (הפרש 2)
+  // אם בישראל 03:00 כשאצלנו 00:00 UTC -> שעון קיץ (הפרש 3)
+  const ilTimeAtMidnightUTC = midnightUTC.toLocaleTimeString('en-US', { timeZone: 'Asia/Jerusalem', hour12: false });
+  const hourOffset = parseInt(ilTimeAtMidnightUTC.split(':')[0], 10);
+  
+  // 4. חיסור ההפרש כדי לקבל את ה-UTC האמיתי של חצות ישראל
+  midnightUTC.setHours(midnightUTC.getHours() - hourOffset);
+  
+  return midnightUTC.toISOString();
+}
+
 export async function GET(req: Request) {
   if (!supabaseServer) {
     return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
@@ -42,10 +65,8 @@ export async function GET(req: Request) {
 
     } else {
       // --- טבלה יומית ---
-      const startOfDay = new Date().toLocaleString('en-US', { timeZone: 'Asia/Jerusalem' });
-      const dateObj = new Date(startOfDay);
-      dateObj.setHours(0,0,0,0);
-      const isoStart = dateObj.toISOString(); 
+      // שימוש בפונקציה החדשה לחישוב זמן התחלה מדויק
+      const isoStart = getStartOfIsraelDayISO();
 
       // 1. שליפת השיאים היומיים (ללא קוסמטיקה בינתיים)
       const { data: dailyData, error: dailyError } = await supabaseServer
@@ -125,6 +146,7 @@ export async function POST(req: Request) {
     const finalUserId: string | null = userId || null;
 
     // 1. שמירה בהיסטוריה (טבלת high_scores)
+    // הערה: created_at מקבל אוטומטית את זמן השרת (UTC)
     const { error: histError } = await supabaseServer.from('high_scores').insert({
       user_id: finalUserId,
       player_name: playerName,

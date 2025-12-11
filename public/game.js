@@ -12,13 +12,34 @@
     fetchBuffer: 5,
     randomSubjectsCount: 8,
     scorePerCorrectForRanking: 500,
+
     baseShopPrices: {
       time_small: 100,
       time_big: 200,
       lifelines: 300,
     },
+
+    timeSmallCostFactor: 1.0,
+    timeBigCostFactor: 2.5,
+
     // חלוקה ל-10 שלבים, 5 בכל שלב = 50 סה"כ
     dailyStagesDistribution: [5, 5, 5, 5, 5, 5, 5, 5, 5, 5],
+  };
+
+  // --- קונפיגורציית עקומת קושי (Difficulty Curve) ---
+  // מגדיר איזה סוג שאלות לקחת עבור כל שלב (1-10)
+  // הסדר במערך הוא העדיפות: נסה לקחת מהראשון, אם אין קח מהשני וכו'.
+  const DIFFICULTY_CURVE = {
+    1: ['easy'],               // שלב 1: רק קל
+    2: ['easy'],               // שלב 2: רק קל
+    3: ['easy', 'medium'],     // שלב 3: מעורב, עדיפות לקל
+    4: ['medium', 'easy'],     // שלב 4: מעורב, עדיפות לבינוני
+    5: ['medium'],             // שלב 5: רק בינוני
+    6: ['medium'],             // שלב 6: רק בינוני
+    7: ['medium', 'hard'],     // שלב 7: מעורב, עדיפות לבינוני
+    8: ['hard', 'medium'],     // שלב 8: מעורב, עדיפות לקשה
+    9: ['hard'],               // שלב 9: רק קשה
+    10: ['hard']               // שלב 10: רק קשה (בוס)
   };
 
   const ACHIEVEMENTS_LIST = [
@@ -218,6 +239,78 @@
     if (typeof q.correctIndex !== 'number' || q.correctIndex < 0 || q.correctIndex >= q.options.length) return false;
     if (!q.category || typeof q.category !== 'string') return false;
     return true;
+  }
+
+  // --- פונקציה חדשה לסידור שאלות האתגר היומי לפי קושי ---
+  function organizeDailyChallengeQuestions(allQuestions) {
+    // 1. מיון לדליים (Buckets)
+    const buckets = {
+        easy: [],
+        medium: [],
+        hard: []
+    };
+
+    // חלוקה ראשונית לדליים עם ערבול פנימי
+    allQuestions.forEach(q => {
+        const diff = (q.difficulty || 'medium').toLowerCase();
+        if (buckets[diff]) {
+            buckets[diff].push(q);
+        } else {
+            buckets['medium'].push(q); // Fallback
+        }
+    });
+
+    // ערבוב כל דלי בנפרד
+    shuffleArray(buckets.easy);
+    shuffleArray(buckets.medium);
+    shuffleArray(buckets.hard);
+
+    let organizedQueue = [];
+    const totalStages = GAME_CONFIG.dailyStagesDistribution.length;
+
+    // 2. בניית התור לפי השלבים
+    for (let stage = 1; stage <= totalStages; stage++) {
+        const count = GAME_CONFIG.dailyStagesDistribution[stage - 1] || 5;
+        const priorities = DIFFICULTY_CURVE[stage] || ['medium']; // ברירת מחדל אם אין הגדרה
+
+        for (let i = 0; i < count; i++) {
+            let selectedQuestion = null;
+
+            // נסה למצוא שאלה לפי סדר העדיפויות של השלב
+            for (const diff of priorities) {
+                if (buckets[diff].length > 0) {
+                    selectedQuestion = buckets[diff].pop();
+                    break;
+                }
+            }
+
+            // Fallback 1: אם לא מצאנו, חפש בכל שאר הדליים (Easy -> Medium -> Hard)
+            if (!selectedQuestion) {
+                if (buckets.easy.length > 0) selectedQuestion = buckets.easy.pop();
+                else if (buckets.medium.length > 0) selectedQuestion = buckets.medium.pop();
+                else if (buckets.hard.length > 0) selectedQuestion = buckets.hard.pop();
+            }
+
+            // Fallback 2: אם באמת נגמרו כל השאלות (לא סביר ב-50)
+            if (selectedQuestion) {
+                organizedQueue.push(selectedQuestion);
+            }
+        }
+    }
+
+    // אם נשארו שאלות עודפות (במקרה של באג בספירה), נוסיף לסוף
+    // (אופציונלי, אבל שומר על שלמות אם ה-Count לא תואם)
+    const remaining = [...buckets.easy, ...buckets.medium, ...buckets.hard];
+    shuffleArray(remaining);
+    
+    // אבל אנחנו רוצים בדיוק את כמות השאלות שהוגדרה, אז נתעלם מהשארית
+    // אלא אם כן המכסה לא מולאה
+    if (organizedQueue.length < 50 && remaining.length > 0) {
+        const needed = 50 - organizedQueue.length;
+        organizedQueue.push(...remaining.slice(0, needed));
+    }
+
+    return organizedQueue;
   }
 
   // פונקציה זו הוסרה מכיוון שהגיוון עבר לפרומפט הראשי, אך נשאיר אותה למקרה הצורך
@@ -453,10 +546,11 @@
       const data = await res.json();
 
       if (data.questions && Array.isArray(data.questions)) {
-        shuffleArray(data.questions);
-
+        
+        // --- שינוי מרכזי: עיבוד ראשוני + סידור לפי קושי ---
         const processed = data.questions.map(q => {
           if (isValidQuestion(q)) {
+            // טיפול באפשרויות ותשובה נכונה
             const originalCorrectAnswer = q.options[q.correctIndex];
             shuffleArray(q.options);
             const newCorrectIndex = q.options.indexOf(originalCorrectAnswer);
@@ -466,7 +560,8 @@
           return null;
         }).filter(q => q !== null);
 
-        state.questionQueue = processed;
+        // במקום סתם לערבב הכל, אנחנו ממיינים לפי דרגות הקושי והשלבים
+        state.questionQueue = organizeDailyChallengeQuestions(processed);
 
         switchScreen('game-screen');
         state.lastFrameTime = performance.now();
@@ -900,13 +995,29 @@
   }
 
   function getShopPrice(type) {
-    const s = state.stage;
+    const s = state.stage || 1;
+
+    // פרס בסיסי לתשובה נכונה בשלב הנוכחי
+    const stageReward = Math.floor(
+      GAME_CONFIG.baseMoney * Math.pow(GAME_CONFIG.moneyMultiplier, s - 1)
+    );
+
+    if (type === 'time_small') {
+      return Math.round(stageReward * GAME_CONFIG.timeSmallCostFactor);
+    }
+
+    if (type === 'time_big') {
+      return Math.round(stageReward * GAME_CONFIG.timeBigCostFactor);
+    }
+
     const base = GAME_CONFIG.baseShopPrices;
-    if (type === 'time_small') return base.time_small + (s - 1) * 50;
-    if (type === 'time_big') return base.time_big + (s - 1) * 100;
-    if (type === 'lifelines') return base.lifelines + (s - 1) * 150;
+    if (type === 'lifelines') {
+      return base.lifelines + (s - 1) * 150;
+    }
+
     return 9999;
   }
+
 
   function openShop() {
     if (!state.isPlaying) return;
