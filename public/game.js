@@ -8,9 +8,8 @@
     timeBonusBase: 8,
     timePenaltyBase: 3,
     questionsPerStage: 5, // 50 שאלות / 10 שלבים = 5
-    fetchBatchSize: 25, // מותאם לנגלות החדשות
+    fetchBatchSize: 25, // גודל נגלה
     fetchBuffer: 5,
-    randomSubjectsCount: 8,
     scorePerCorrectForRanking: 500,
 
     baseShopPrices: {
@@ -238,11 +237,17 @@
     if (q.options.some(opt => !opt || typeof opt !== 'string' || opt.trim().length === 0)) return false;
     if (typeof q.correctIndex !== 'number' || q.correctIndex < 0 || q.correctIndex >= q.options.length) return false;
     if (!q.category || typeof q.category !== 'string') return false;
+
+    // ולידציה ל-difficulty
+    if (!['easy', 'medium', 'hard'].includes(q.difficulty)) {
+        q.difficulty = 'medium'; // ברירת מחדל
+    }
+    
     return true;
   }
 
-  // --- פונקציה חדשה לסידור שאלות האתגר היומי לפי קושי ---
-  function organizeDailyChallengeQuestions(allQuestions) {
+  // --- פונקציה לסידור שאלות (יומי או מותאם) לפי עקומת הקושי ---
+  function organizeQuestionsByDifficulty(allQuestions) {
     // 1. מיון לדליים (Buckets)
     const buckets = {
         easy: [],
@@ -298,13 +303,10 @@
         }
     }
 
-    // אם נשארו שאלות עודפות (במקרה של באג בספירה), נוסיף לסוף
-    // (אופציונלי, אבל שומר על שלמות אם ה-Count לא תואם)
+    // אם נשארו שאלות עודפות, נוסיף לסוף (למקרה חירום)
     const remaining = [...buckets.easy, ...buckets.medium, ...buckets.hard];
     shuffleArray(remaining);
     
-    // אבל אנחנו רוצים בדיוק את כמות השאלות שהוגדרה, אז נתעלם מהשארית
-    // אלא אם כן המכסה לא מולאה
     if (organizedQueue.length < 50 && remaining.length > 0) {
         const needed = 50 - organizedQueue.length;
         organizedQueue.push(...remaining.slice(0, needed));
@@ -313,20 +315,15 @@
     return organizedQueue;
   }
 
-  // פונקציה זו הוסרה מכיוון שהגיוון עבר לפרומפט הראשי, אך נשאיר אותה למקרה הצורך
-  function generateSmartAngles(topics) {
-    return [];
-  }
-
-  async function fetchQuestionsFromAI(count, currentStage) {
+// פונקציה לשליפת שאלות ל-AI עבור משחק מותאם אישית
+  // targetCounts = { easy: 10, medium: 10, hard: 5 }
+  // existingQuestions = מערך של מחרוזות (שאלות שכבר קיימות במשחק כדי למנוע כפילות סמנטית)
+  async function fetchQuestionsFromAI(count, targetCounts = null, existingQuestions = []) {
     if (state.isDailyMode) return [];
 
-    const totalToFetch = count + GAME_CONFIG.fetchBuffer;
+    const totalToFetch = count;
     const maxRetries = 3;
     
-    // ביטול מנגנון "זווית יחידה" לטובת גיוון בתוך הפרומפט
-    // const possibleAngles = ... 
-
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       const randomSeed = Math.floor(Math.random() * 999999);
 
@@ -349,25 +346,52 @@
         promptContext = `צור שאלות ידע כללי וטריווויה.`;
       }
 
-      let difficulty;
-      if (currentStage === 1) difficulty = 'קל-בינוני';
-      else if (currentStage <= 5) difficulty = 'בינוני';
-      else difficulty = 'בינוני-קשה';
+      // בניית דרישת הקושי
+      let difficultyInstruction = '';
+      if (targetCounts) {
+          difficultyInstruction = `
+          עליך לייצר תמהיל שאלות לפי החלוקה הבאה (בערך):
+          - Easy: ${targetCounts.easy || 0}
+          - Medium: ${targetCounts.medium || 0}
+          - Hard: ${targetCounts.hard || 0}
+          `;
+      } else {
+          // ברירת מחדל אם לא סופק
+          difficultyInstruction = `צור תמהיל מאוזן של רמות קושי (Easy, Medium, Hard).`;
+      }
+
+      // בניית הקשר למניעת כפילויות (Semantic Filter Context)
+      let avoidContext = '';
+      if (existingQuestions && existingQuestions.length > 0) {
+          // לוקחים דגימה או את הכל, תלוי באורך, כדי לא לחרוג ממגבלת טוקנים (לרוב 50 שאלות זה בסדר)
+          const listStr = existingQuestions.join(' | ');
+          avoidContext = `
+          CRITICAL NEGATIVE CONSTRAINT (מניעת כפילויות):
+          הרשימה הבאה מכילה שאלות שכבר נשאלו במשחק זה.
+          עליך לוודא ב-100% שאינך מייצר שאלה ששואלת על אותה עובדה המופיעה ברשימה זו, גם אם הניסוח שונה!
+          
+          Questions already asked (DO NOT REPEAT THESE FACTS):
+          [ ${listStr} ]
+          `;
+      }
 
       const prompt = `
         אתה מנוע טריוויה למשחק מהיר בסגנון שעשועון טלוויזיה. Seed: ${randomSeed}.
         משימה: צור ${totalToFetch} שאלות בעברית.
         ${promptContext}
 
-        הנחיה חשובה לגיוון (חובה!):
-        עליך ליצור תמהיל מגוון של שאלות ברשימה זו, ולא להיצמד לסוג אחד בלבד!
-        החלוקה המומלצת בתוך ה-${totalToFetch} שאלות:
-        1. שאלות טריוויה קלאסיות (רוב השאלות).
-        2. חידות היגיון קצרות וקלילות.
-        3. עובדות מפתיעות.
-        4. שאלות "נכון או לא נכון" (מקסימום 20% מהשאלות, לא יותר).
-        5. "מה יוצא דופן?" (אופציונלי).
+        ${difficultyInstruction}
 
+        ${avoidContext}
+
+        הנחיה חשובה לגיוון ומניעת כפילויות (חובה!):
+        1. וודא שאין כפילויות סמנטיות בתוך הרשימה החדשה שאתה יוצר כעת (שלא יהיו שתי שאלות על אותה עובדה).
+        2. עליך ליצור תמהיל מגוון של שאלות ברשימה זו, ולא להיצמד לסוג אחד בלבד!
+        החלוקה המומלצת בתוך ה-${totalToFetch} שאלות:
+        - שאלות טריוויה קלאסיות (רוב השאלות).
+        - חידות היגיון קצרות וקלילות.
+        - עובדות מפתיעות.
+        - שאלות "נכון או לא נכון" (מקסימום 20% מהשאלות, לא יותר).
 
         הנחיות טכניות קריטיות (חובה):
         1. שאלה: קצרה מאוד! עד 15 מילים. שורה אחת עד אחד וחצי גג.
@@ -375,7 +399,7 @@
         3. כמות אפשרויות: 
            - לשאלת "נכון/לא נכון": חובה בדיוק 2 אפשרויות ("נכון", "לא נכון").
            - לכל שאר השאלות: חובה בדיוק 3 אפשרויות.
-        4. רמת קושי: ${difficulty}.
+        4. שדה "difficulty" חובה לכל שאלה: ערכים מותרים "easy", "medium", או "hard".
 
         פלט JSON בלבד:
         [
@@ -383,7 +407,8 @@
             "question": "שאלה קצרה",
             "options": ["תשובה1", "תשובה2", "תשובה3"],
             "correctIndex": 0,
-            "category": "קטגוריה"
+            "category": "קטגוריה",
+            "difficulty": "easy"
           }
         ]
       `;
@@ -452,6 +477,7 @@
       options: ['נסה', 'שוב', 'מאוחר יותר'],
       correctIndex: 0,
       category: 'שגיאה',
+      difficulty: 'medium',
       hint: 'API',
     }));
   }
@@ -547,7 +573,7 @@
 
       if (data.questions && Array.isArray(data.questions)) {
         
-        // --- שינוי מרכזי: עיבוד ראשוני + סידור לפי קושי ---
+        // עיבוד ראשוני + סידור לפי קושי
         const processed = data.questions.map(q => {
           if (isValidQuestion(q)) {
             // טיפול באפשרויות ותשובה נכונה
@@ -560,8 +586,8 @@
           return null;
         }).filter(q => q !== null);
 
-        // במקום סתם לערבב הכל, אנחנו ממיינים לפי דרגות הקושי והשלבים
-        state.questionQueue = organizeDailyChallengeQuestions(processed);
+        // שימוש בפונקציה המאוחדת לסידור שאלות
+        state.questionQueue = organizeQuestionsByDifficulty(processed);
 
         switchScreen('game-screen');
         state.lastFrameTime = performance.now();
@@ -579,7 +605,7 @@
     }
   }
 
-  async function startCustomGame() {
+async function startCustomGame() {
     const nameInput = document.getElementById('player-name-input');
     if (!nameInput) return;
     const playerName = nameInput.value.trim();
@@ -605,17 +631,57 @@
     resetGameState();
     
     const msgEl = document.getElementById('loading-msg');
-    if(msgEl) msgEl.textContent = 'מכין 50 שאלות מותאמות אישית...';
+    const sourcesList = document.getElementById('sources-list');
+    if (sourcesList) sourcesList.innerHTML = '';
 
-    // בגלל שזה 50 שאלות, אנחנו נטען אותן ב-2 חלקים או הכל אם אפשר.
-    // הקונפיגורציה ב fetchBatchSize היא 25. אז נטען נגלה ראשונה.
-    await loadNextBatch();
+    if (msgEl) {
+        if (state.useGoogle) msgEl.textContent = 'מכין שאלות חכמות מגוגל... 🌍';
+        else msgEl.textContent = 'מכין 50 שאלות מותאמות אישית...';
+    }
 
-    if (state.questionQueue.length === 0) {
+    // --- טעינת שתי נגלות כדי ליצור מאגר של 50 שאלות עם עקומת קושי ---
+    let allRawQuestions = [];
+    let batch1QuestionsText = []; // רשימה לשמירת השאלות לצורך מניעת כפילות
+
+    // נגלה 1: דגש על Easy ו-Medium
+    // נבקש 25 שאלות (10 Easy, 10 Medium, 5 Hard)
+    try {
+        // בנגלה הראשונה אין היסטוריה, מעבירים מערך ריק
+        const batch1 = await fetchQuestionsFromAI(25, { easy: 10, medium: 10, hard: 5 }, []);
+        if (Array.isArray(batch1)) {
+            allRawQuestions.push(...batch1);
+            // שומרים את הטקסט של השאלות כדי להעביר לנגלה הבאה
+            batch1QuestionsText = batch1.map(q => q.question);
+        }
+    } catch (e) { console.error('Batch 1 failed', e); }
+
+    // נגלה 2: דגש על Medium ו-Hard
+    // נבקש 25 שאלות (5 Easy, 10 Medium, 10 Hard)
+    try {
+        // מעבירים את batch1QuestionsText כדי למנוע מה-AI לחזור על עובדות מנגלה 1
+        const batch2 = await fetchQuestionsFromAI(25, { easy: 5, medium: 10, hard: 10 }, batch1QuestionsText);
+        if (Array.isArray(batch2)) allRawQuestions.push(...batch2);
+    } catch (e) { console.error('Batch 2 failed', e); }
+
+    // סינון שאלות ייחודיות (הגנה נוספת ל-Exact Match)
+    const uniqueQuestions = [];
+    const seen = new Set();
+    allRawQuestions.forEach(q => {
+        const qKey = (q.question || '').trim();
+        if (!seen.has(qKey) && isValidQuestion(q)) {
+            seen.add(qKey);
+            uniqueQuestions.push(q);
+        }
+    });
+
+    if (uniqueQuestions.length === 0) {
       alert('לא הצלחנו ליצור שאלות. בדוק את המפתח שלך.');
       returnToMenu();
       return;
     }
+
+    // סידור השאלות לפי עקומת הקושי (Easy בהתחלה, Hard בסוף)
+    state.questionQueue = organizeQuestionsByDifficulty(uniqueQuestions);
 
     switchScreen('game-screen');
     state.lastFrameTime = performance.now();
@@ -655,29 +721,21 @@
     });
   }
 
+// פונקציה זו נשארה כ-Fallback אם נצטרך Refill באמצע משחק מותאם
   async function loadNextBatch() {
-    if (state.isDailyMode && state.questionQueue.length === 0) {
-      return;
-    }
+    if (state.isDailyMode) return; 
 
-    const msgEl = document.getElementById('loading-msg');
-    const sourcesList = document.getElementById('sources-list');
-    const tipEl = document.getElementById('loading-tip');
+    // שליפת כל השאלות שכבר היו במשחק כדי למנוע כפילויות סמנטיות
+    const historyList = Array.from(state.seenQuestions);
 
-    if (sourcesList) sourcesList.innerHTML = '';
-
-    if (msgEl) {
-      if (state.useGoogle) {
-        msgEl.textContent = 'מחפש מידע בגוגל... 🌍';
-      } else if (state.customTopics.length > 0) {
-        msgEl.textContent = 'חוקר את הנושאים שלך...';
-      } else {
-        msgEl.textContent = 'מכין את השלב הבא...';
-      }
-    }
-
+    // במקרה של Refill נבקש תמהיל קשה יותר
     try {
-      const newQuestions = await fetchQuestionsFromAI(GAME_CONFIG.fetchBatchSize, state.stage);
+      const newQuestions = await fetchQuestionsFromAI(
+          GAME_CONFIG.fetchBatchSize, 
+          { easy: 5, medium: 10, hard: 10 },
+          historyList // מעבירים את ההיסטוריה
+      );
+      
       const uniqueQuestions = [];
       if (Array.isArray(newQuestions)) {
         newQuestions.forEach((q) => {
@@ -688,6 +746,7 @@
           }
         });
       }
+      // ב-Refill פשוט מוסיפים לסוף, ללא סידור מחדש
       state.questionQueue = [...state.questionQueue, ...uniqueQuestions];
     } catch (e) {
       console.error('Failed loading batch', e);
@@ -778,7 +837,7 @@
         gameOver('סיימת את כל השאלות היומיות! 🏆');
         return;
       }
-      // במשחק מותאם אישית, אם נגמרו בנגלה הראשונה, נטען עוד
+      // במשחק מותאם אישית, אם נגמרו, נטען עוד (Refill)
       state.isFrozen = true;
       switchScreen('loading-screen');
       loadNextBatch().then(() => {
@@ -806,7 +865,12 @@
     }
     
     if (questionText) questionText.textContent = q.question;
-    if (categoryEl) categoryEl.textContent = q.category || 'כללי';
+    
+    if (categoryEl) {
+        // הצגת קטגוריה וגם רמת קושי אם יש (לדיבאג ולשחקן)
+        const diffLabel = q.difficulty ? ` (${q.difficulty})` : '';
+        categoryEl.textContent = (q.category || 'כללי') + diffLabel;
+    }
 
     if (container) {
       q.options.forEach((opt, idx) => {

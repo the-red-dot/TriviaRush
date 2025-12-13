@@ -42,9 +42,10 @@ export async function GET(req: Request) {
 
     if (type === 'accumulated') {
       // בטבלה המצטברת הכל נמצא באותה טבלה, כולל הקוסמטיקה
+      // התיקון: הוספת achievements לרשימת השדות הנשלפים
       const { data, error } = await supabaseServer
         .from('user_best_scores')
-        .select('player_name, masked_id, score, total_money, total_correct, total_wrong, last_played_at, active_frame, golden_name_expires_at')
+        .select('player_name, masked_id, score, total_money, total_correct, total_wrong, last_played_at, active_frame, golden_name_expires_at, achievements')
         .order('score', { ascending: false })
         .limit(20);
       
@@ -183,6 +184,11 @@ export async function POST(req: Request) {
           last_played_at: new Date().toISOString()
         });
       } else {
+        // מיזוג הישגים: לוקחים את הקיימים ומוסיפים את החדשים (Set מונע כפילויות)
+        const oldAchievements = existingEntry.achievements || [];
+        const newAchievements = achievements || [];
+        const mergedAchievements = Array.from(new Set([...oldAchievements, ...newAchievements]));
+
         // עדכון רשומה קיימת
         const updateData: any = {
           player_name: playerName,
@@ -190,12 +196,13 @@ export async function POST(req: Request) {
           last_played_at: new Date().toISOString(),
           total_money: (existingEntry.total_money || 0) + (money ?? 0),
           total_correct: (existingEntry.total_correct || 0) + (correct_count ?? 0),
-          total_wrong: (existingEntry.total_wrong || 0) + (wrong_count ?? 0)
+          total_wrong: (existingEntry.total_wrong || 0) + (wrong_count ?? 0),
+          achievements: mergedAchievements // מעדכנים הישגים תמיד, לא רק בשיא חדש
         };
 
+        // עדכון השיא עצמו רק אם התוצאה הנוכחית גבוהה יותר
         if (score > existingEntry.score) {
           updateData.score = score;
-          updateData.achievements = achievements ?? []; 
         }
 
         await supabaseServer
