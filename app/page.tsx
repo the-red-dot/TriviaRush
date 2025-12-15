@@ -1017,16 +1017,28 @@ export default function HomePage() {
         </div>
 
         {/* --- Share Section Start --- */}
-        <div style={{width: '100%', marginBottom: 20}}>
+        <div style={{width: '100%', marginBottom: 20, position: 'relative', zIndex: 100}}>
             <div style={{textAlign: 'center', marginBottom: 10, fontSize: '0.9rem', color: '#aaa'}}>שתף את התוצאה ואתגר חברים:</div>
-            <div style={{display: 'flex', gap: 10, justifyContent: 'center'}}>
+            <div style={{display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap'}}>
+                {/* Whatsapp */}
                 <button 
                     className="btn" 
-                    style={{flex: 1, background: '#25D366', padding: '10px', fontSize: '1rem', margin: 0}}
+                    style={{flex: 1, minWidth: '100px', background: '#25D366', padding: '10px', fontSize: '1rem', margin: 0}}
                     onClick={() => window.shareResult && window.shareResult('whatsapp')}
                 >
                     <i data-lucide="message-circle" /> וואטסאפ
                 </button>
+                
+                {/* Facebook - נוסף חדש */}
+                <button 
+                    className="btn" 
+                    style={{width: '50px', background: '#1877F2', padding: '10px', fontSize: '1rem', margin: 0, border: '1px solid #1877F2'}}
+                    onClick={() => window.shareResult && window.shareResult('facebook')}
+                >
+                    <i data-lucide="facebook" />
+                </button>
+
+                {/* Twitter / X */}
                 <button 
                     className="btn" 
                     style={{width: '50px', background: '#000', padding: '10px', fontSize: '1rem', margin: 0, border: '1px solid #333'}}
@@ -1034,6 +1046,8 @@ export default function HomePage() {
                 >
                     <i data-lucide="twitter" />
                 </button>
+
+                 {/* Native Share */}
                  <button 
                     className="btn" 
                     style={{width: '50px', background: 'var(--primary)', padding: '10px', fontSize: '1rem', margin: 0}}

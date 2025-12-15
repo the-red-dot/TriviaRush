@@ -1379,34 +1379,40 @@
     }
   }
 
-  // --- Share Logic ---
+// --- Share Logic ---
   function shareResult(platform) {
     const score = state.score.toLocaleString();
     const stage = state.stage;
     
-    // ניסוח ההודעה
-    let text = '';
+    // בסיס הטקסט ללא ה-URL (כדי למנוע כפילות בטוויטר/פייסבוק)
+    let textBase = '';
     if (state.isDailyMode) {
-      text = `🔥 השגתי ${score} נקודות באתגר היומי של טריוויה ראש (שלב ${stage})! נראה אתכם מנצחים אותי! 🧠🏃‍♂️`;
+      textBase = `🔥 השגתי ${score} נקודות באתגר היומי של טריוויה ראש (שלב ${stage})! נראה אתכם מנצחים אותי! 🧠🏃‍♂️`;
     } else {
-      text = `🔥 השגתי ${score} נקודות במשחק טריוויה ראש! בואו לשחק בנושאים שאתם בוחרים! 🧠🏃‍♂️`;
+      textBase = `🔥 השגתי ${score} נקודות במשחק טריוויה ראש! בואו לשחק בנושאים שאתם בוחרים! 🧠🏃‍♂️`;
     }
 
-    const url = window.location.origin; // הכתובת של האתר שלך
+    // הכתובת של האתר שלך (חשוב שתהיה מדויקת כדי שה-Card יעבוד)
+    // אם אתה ב-Localhost זה לא יציג תמונה בטוויטר/פייסבוק, רק ב-Production
+    const url = window.location.origin; 
     const hashtags = 'TriviaRush,טריוויה,משחק';
 
     switch (platform) {
       case 'whatsapp':
-        // בווצאפ אנחנו שולחים טקסט + לינק
-        window.open(`https://wa.me/?text=${encodeURIComponent(text + ' ' + url)}`, '_blank');
+        // בווצאפ אנחנו שולחים טקסט + לינק מחוברים
+        window.open(`https://wa.me/?text=${encodeURIComponent(textBase + ' ' + url)}`, '_blank');
         break;
       
       case 'twitter':
-        window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}&hashtags=${hashtags}`, '_blank');
+        // בטוויטר אנחנו מפרידים בין הטקסט ללינק כדי שה-Card ייווצר תקין
+        // השימוש ב-hashtags ללא סולמית (#) בפרמטר
+        const twitterUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(textBase)}&url=${encodeURIComponent(url)}&hashtags=${hashtags}`;
+        window.open(twitterUrl, '_blank');
         break;
       
       case 'facebook':
-        // פייסבוק לא מאפשרת טקסט מותאם אישית ב-API, רק URL
+        // פייסבוק לוקחת את המידע (תמונה/כותרת) מה-Meta Tags של ה-URL בלבד.
+        // הטקסט שהמשתמש כותב הוא ידני, אבל הלינק מצורף אוטומטית.
         window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`, '_blank');
         break;
 
@@ -1415,11 +1421,11 @@
         if (navigator.share) {
           navigator.share({
             title: 'Trivia Rush',
-            text: text,
+            text: textBase,
             url: url
           }).catch(console.error);
         } else {
-          // Fallback לווצאפ אם אין Native Share
+          // Fallback לווצאפ אם אין Native Share (למשל בדסקטופ)
           shareResult('whatsapp');
         }
         break;
