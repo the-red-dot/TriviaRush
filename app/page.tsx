@@ -2,10 +2,18 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
-import Script from 'next/script';
-import { supabaseBrowser } from '../utils/supabase-browser';
+import React, { useEffect, useState } from 'react';
+import { createClient } from '@supabase/supabase-js';
+import { LucideIcon } from 'lucide-react';
 
+// --- Supabase Setup (Inlined) ---
+// Note: In a real app, use environment variables. 
+// For this environment, we attempt to read them or fallback safely.
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabaseBrowser = createClient(supabaseUrl, supabaseAnonKey);
+
+// --- Types ---
 declare global {
   interface Window {
     triviaRushInit?: () => void;
@@ -22,9 +30,9 @@ declare global {
     returnToMenu?: () => void;
     backToLeaderboard?: () => void;
     addCustomTopic?: () => void;
-    toggleGoogleSearch?: () => void;
     showPlayerDetails?: (index: number) => void;
     removeCustomTopic?: (topic: string) => void;
+    shareResult?: (platform: string) => void;
 
     currentUser?: {
       id: string;
@@ -33,6 +41,44 @@ declare global {
     userApiKey?: string | null;
   }
 }
+
+// --- Inline Components ---
+
+const InstructionsModal = () => {
+  return (
+    <div id="instructions-modal" className="modal-overlay">
+      <div className="modal-content">
+        <div className="modal-header">
+          <button
+            className="modal-back-btn"
+            onClick={() => window.closeModal && window.closeModal('instructions-modal')}
+          >
+            <i data-lucide="arrow-right" />
+          </button>
+          <span>📜 הוראות משחק</span>
+        </div>
+        <div className="modal-body" style={{ textAlign: 'right', direction: 'rtl' }}>
+          <h3>איך משחקים?</h3>
+          <ul style={{ paddingRight: '20px', lineHeight: '1.6' }}>
+            <li>ענו על כמה שיותר שאלות נכונות לפני שנגמר הזמן.</li>
+            <li>כל תשובה נכונה מזכה אתכם בכסף ובתוספת זמן.</li>
+            <li>תשובה שגויה תוריד לכם זמן יקר מהשעון!</li>
+            <li>השתמשו בגלגלי הצלה (50/50, AI, הקפאה) כשאתם תקועים.</li>
+            <li>בחנויות ניתן לקנות תוספות זמן ופריטים מיוחדים עם הכסף שצברתם.</li>
+          </ul>
+        </div>
+        <div className="modal-footer">
+          <button
+            className="btn"
+            onClick={() => window.closeModal && window.closeModal('instructions-modal')}
+          >
+            הבנתי, בוא נשחק!
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 export default function HomePage() {
   const [loadingUser, setLoadingUser] = useState(true);
@@ -67,7 +113,9 @@ export default function HomePage() {
 
   useEffect(() => {
     // Init Game
-    window.triviaRushInit && window.triviaRushInit();
+    if (window.triviaRushInit) {
+        window.triviaRushInit();
+    }
 
     // Check Auth
     supabaseBrowser.auth.getUser().then(({ data }) => {
@@ -308,15 +356,9 @@ export default function HomePage() {
 
   return (
     <>
-      <Script
-        src="https://unpkg.com/lucide@latest"
-        strategy="beforeInteractive"
-      />
-      <Script
-        src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"
-        strategy="beforeInteractive"
-      />
-      <Script src="/game.js" strategy="afterInteractive" />
+      <script src="https://unpkg.com/lucide@latest"></script>
+      <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+      <script src="/game.js"></script>
 
       <div id="audio-controller"></div>
 
@@ -600,46 +642,8 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* Instructions Modal */}
-      <div id="instructions-modal" className="modal-overlay">
-        <div className="modal-content">
-          <div className="modal-header">📜 איך משחקים?</div>
-          <div
-            className="modal-body"
-            style={{ textAlign: 'right', lineHeight: 1.6 }}
-          >
-             <div style={{ marginBottom: 15 }}>
-              <h3 style={{ color: 'var(--secondary)', marginBottom: 5 }}>
-                ⚡ המטרה
-              </h3>
-              לענות על כמה שיותר שאלות, לצבור כסף ולשרוד כמה שיותר זמן!
-            </div>
-
-            <div style={{ marginBottom: 15 }}>
-              <h3 style={{ color: 'var(--warning)', marginBottom: 5 }}>
-                ⏳ חוקי בסיס
-              </h3>
-              <ul style={{ paddingRight: 20 }}>
-                <li>הזמן הוא המשאב הכי חשוב (נגמר = הפסד).</li>
-                <li>תשובה נכונה = כסף + זמן.</li>
-                <li>תשובה שגויה = קנס זמן.</li>
-                <li><b>הזמן לא עוצר בחנות!</b></li>
-              </ul>
-            </div>
-          </div>
-          <div className="modal-footer">
-            <button
-              className="btn"
-              style={{ width: 'auto', padding: '10px 30px' }}
-              onClick={() =>
-                window.closeModal && window.closeModal('instructions-modal')
-              }
-            >
-              הבנתי, יאללה!
-            </button>
-          </div>
-        </div>
-      </div>
+      {/* Instructions Modal Component */}
+      <InstructionsModal />
 
       {/* Main Menu */}
       <div id="menu-screen" className="screen active" style={{ overflowY: 'auto' }}>
@@ -755,22 +759,6 @@ export default function HomePage() {
             </div>
             <div id="custom-topics-list" className="topics-list" />
             
-            <div className="google-toggle-container" style={{marginTop: 5}}>
-                <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                    חיפוש בגוגל
-                </span>
-                <label className="switch">
-                    <input
-                    type="checkbox"
-                    id="google-search-toggle"
-                    onChange={() =>
-                        window.toggleGoogleSearch && window.toggleGoogleSearch()
-                    }
-                    />
-                    <span className="slider" />
-                </label>
-            </div>
-
             <button
                 className="btn"
                 onClick={handleCustomGameStart}
@@ -809,13 +797,57 @@ export default function HomePage() {
 
       {/* Loading Screen */}
       <div id="loading-screen" className="screen">
-        <div className="loader" />
-        <div className="loading-text" id="loading-msg">
-          מכין את המוח...
-        </div>
-        <div id="sources-list" />
-        <div className="loading-tip" id="loading-tip">
-          טיפ: שאלות קשות נותנות פחות זמן אבל יותר כסף!
+        <div style={{width: '80%', maxWidth: '400px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '15px'}}>
+            
+            <div className="loading-icon" style={{fontSize: '3rem', animation: 'bounce 2s infinite'}}>
+                🧠
+            </div>
+
+            <div className="loading-text" id="loading-msg" style={{minHeight: '1.5em'}}>
+              מכין את המשחק...
+            </div>
+
+            {/* Progress Bar Container */}
+            <div style={{
+                width: '100%', 
+                height: '24px', 
+                background: 'rgba(255,255,255,0.1)', 
+                borderRadius: '12px', 
+                overflow: 'hidden',
+                border: '1px solid rgba(255,255,255,0.2)',
+                position: 'relative',
+                boxShadow: '0 0 10px rgba(0,0,0,0.5) inset'
+            }}>
+                {/* The Filling Bar */}
+                <div id="loading-bar-fill" style={{
+                    width: '0%', 
+                    height: '100%', 
+                    background: 'linear-gradient(90deg, var(--primary), var(--secondary))', 
+                    transition: 'width 0.5s ease-out',
+                    borderRadius: '12px',
+                    boxShadow: '0 0 10px var(--primary)'
+                }}></div>
+                
+                {/* Percentage Text (Overlaid) */}
+                <div id="loading-percentage-text" style={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    fontSize: '0.8rem',
+                    fontWeight: 'bold',
+                    color: '#fff',
+                    textShadow: '0 1px 2px black'
+                }}>
+                    0%
+                </div>
+            </div>
+
+            <div id="sources-list" />
+            
+            <div className="loading-tip" id="loading-tip" style={{marginTop: '20px', opacity: 0.7}}>
+              טיפ: שאלות קשות נותנות פחות זמן אבל יותר כסף!
+            </div>
         </div>
       </div>
 
@@ -983,6 +1015,35 @@ export default function HomePage() {
             <span id="final-correct">0</span>
           </div>
         </div>
+
+        {/* --- Share Section Start --- */}
+        <div style={{width: '100%', marginBottom: 20}}>
+            <div style={{textAlign: 'center', marginBottom: 10, fontSize: '0.9rem', color: '#aaa'}}>שתף את התוצאה ואתגר חברים:</div>
+            <div style={{display: 'flex', gap: 10, justifyContent: 'center'}}>
+                <button 
+                    className="btn" 
+                    style={{flex: 1, background: '#25D366', padding: '10px', fontSize: '1rem', margin: 0}}
+                    onClick={() => window.shareResult && window.shareResult('whatsapp')}
+                >
+                    <i data-lucide="message-circle" /> וואטסאפ
+                </button>
+                <button 
+                    className="btn" 
+                    style={{width: '50px', background: '#000', padding: '10px', fontSize: '1rem', margin: 0, border: '1px solid #333'}}
+                    onClick={() => window.shareResult && window.shareResult('twitter')}
+                >
+                    <i data-lucide="twitter" />
+                </button>
+                 <button 
+                    className="btn" 
+                    style={{width: '50px', background: 'var(--primary)', padding: '10px', fontSize: '1rem', margin: 0}}
+                    onClick={() => window.shareResult && window.shareResult('native')}
+                >
+                    <i data-lucide="share-2" />
+                </button>
+            </div>
+        </div>
+        {/* --- Share Section End --- */}
 
         <button
           className="btn"

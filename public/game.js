@@ -106,7 +106,6 @@
     questionStartTime: 0,
     unlockedAchievements: [],
     customTopics: [],
-    useGoogle: false,
     lowTimeFlag: false,
   };
 
@@ -191,12 +190,6 @@
       `;
       list.appendChild(tag);
     });
-  }
-
-  function toggleGoogleSearch() {
-    const toggle = document.getElementById('google-search-toggle');
-    if (!toggle) return;
-    state.useGoogle = toggle.checked;
   }
 
   function renderSources(sources) {
@@ -338,9 +331,6 @@
           1. השאלות חייבות להיות קשורות לנושאים הללו.
           2. ערבב בין הנושאים.
         `;
-        if (state.useGoogle) {
-          promptContext += ` 3. השתמש בחיפוש Google למידע עדכני.`;
-        }
       } else {
         topicsText = 'נושאים: ידע כללי מגוון.';
         promptContext = `צור שאלות ידע כללי וטריווויה.`;
@@ -415,8 +405,6 @@
 
       const requestBody = {
         prompt,
-        enable_google_search: state.useGoogle,
-        tools: state.useGoogle ? [{ google_search: {} }] : [],
         apiKey: window.userApiKey
       };
 
@@ -431,11 +419,7 @@
 
         const data = await response.json();
 
-        let groundingSources = [];
-        if (data.candidates?.[0]?.groundingMetadata?.groundingAttributions) {
-          groundingSources = data.candidates[0].groundingMetadata.groundingAttributions;
-        }
-        if (groundingSources.length > 0 && attempt === 1) renderSources(groundingSources);
+        // הערה: הוסרה התמיכה ב-Grounding Sources כחלק מהסרת Google Search
 
         if (data.candidates && data.candidates[0].content && data.candidates[0].content.parts) {
           let text = data.candidates[0].content.parts[0].text;
@@ -605,7 +589,7 @@
     }
   }
 
-async function startCustomGame() {
+  async function startCustomGame() {
     const nameInput = document.getElementById('player-name-input');
     if (!nameInput) return;
     const playerName = nameInput.value.trim();
@@ -630,14 +614,22 @@ async function startCustomGame() {
     switchScreen('loading-screen');
     resetGameState();
     
-    const msgEl = document.getElementById('loading-msg');
+    // פונקציה פנימית לעדכון הבר
+    const updateProgress = (percent, text) => {
+        const bar = document.getElementById('loading-bar-fill');
+        const txt = document.getElementById('loading-percentage-text');
+        const msg = document.getElementById('loading-msg');
+        
+        if (bar) bar.style.width = `${percent}%`;
+        if (txt) txt.textContent = `${percent}%`;
+        if (msg && text) msg.textContent = text;
+    };
+
     const sourcesList = document.getElementById('sources-list');
     if (sourcesList) sourcesList.innerHTML = '';
 
-    if (msgEl) {
-        if (state.useGoogle) msgEl.textContent = 'מכין שאלות חכמות מגוגל... 🌍';
-        else msgEl.textContent = 'מכין 50 שאלות מותאמות אישית...';
-    }
+    // התחלה - 0%
+    updateProgress(5, 'מתחבר למנוע ה-AI...');
 
     // --- טעינת שתי נגלות כדי ליצור מאגר של 50 שאלות עם עקומת קושי ---
     let allRawQuestions = [];
@@ -646,6 +638,8 @@ async function startCustomGame() {
     // נגלה 1: דגש על Easy ו-Medium
     // נבקש 25 שאלות (10 Easy, 10 Medium, 5 Hard)
     try {
+        updateProgress(15, 'מייצר נגלה ראשונה (שאלות בסיס)...');
+        
         // בנגלה הראשונה אין היסטוריה, מעבירים מערך ריק
         const batch1 = await fetchQuestionsFromAI(25, { easy: 10, medium: 10, hard: 5 }, []);
         if (Array.isArray(batch1)) {
@@ -655,6 +649,9 @@ async function startCustomGame() {
         }
     } catch (e) { console.error('Batch 1 failed', e); }
 
+    // עדכון לאחר נגלה ראשונה - 50%
+    updateProgress(50, 'נגלה ראשונה הושלמה! עובר לשאלות המתקדמות...');
+
     // נגלה 2: דגש על Medium ו-Hard
     // נבקש 25 שאלות (5 Easy, 10 Medium, 10 Hard)
     try {
@@ -662,6 +659,9 @@ async function startCustomGame() {
         const batch2 = await fetchQuestionsFromAI(25, { easy: 5, medium: 10, hard: 10 }, batch1QuestionsText);
         if (Array.isArray(batch2)) allRawQuestions.push(...batch2);
     } catch (e) { console.error('Batch 2 failed', e); }
+
+    // עדכון לקראת סיום - 90%
+    updateProgress(90, 'מסדר את השאלות לפי רמת קושי...');
 
     // סינון שאלות ייחודיות (הגנה נוספת ל-Exact Match)
     const uniqueQuestions = [];
@@ -683,11 +683,17 @@ async function startCustomGame() {
     // סידור השאלות לפי עקומת הקושי (Easy בהתחלה, Hard בסוף)
     state.questionQueue = organizeQuestionsByDifficulty(uniqueQuestions);
 
-    switchScreen('game-screen');
-    state.lastFrameTime = performance.now();
-    requestAnimationFrame(gameLoop);
-    renderQuestion();
-    updateHUD();
+    // סיום - 100%
+    updateProgress(100, 'הכל מוכן! בהצלחה!');
+    
+    // השהייה קטנה כדי שהשחקן יראה שהבר הגיע ל-100
+    setTimeout(() => {
+        switchScreen('game-screen');
+        state.lastFrameTime = performance.now();
+        requestAnimationFrame(gameLoop);
+        renderQuestion();
+        updateHUD();
+    }, 500);
   }
 
   function startGame() {
@@ -975,22 +981,34 @@ async function startCustomGame() {
   function showFloatingText(text, type, color) {
     const el = document.createElement('div');
     el.className = 'float-text';
+    // Add data attribute to track count of active messages per type
+    el.setAttribute('data-msg-type', type); 
     el.textContent = text;
     el.style.color = color;
 
+    // Count existing active messages of this specific type
+    const existingCount = document.querySelectorAll(`.float-text[data-msg-type="${type}"]`).length;
+    // Calculate vertical offset (e.g. 40px down for each existing message)
+    const verticalOffset = existingCount * 40; 
+
     if (type === 'money') {
       el.style.left = '20px';
-      el.style.top = '100px';
+      el.style.top = `${100 + verticalOffset}px`;
       el.classList.add('float-up');
       el.style.fontSize = '1.5rem';
     } else if (type === 'time') {
       el.style.right = '20px';
-      el.style.top = '100px';
+      el.style.top = `${100 + verticalOffset}px`;
       el.classList.add('float-up');
       el.style.fontSize = '1.5rem';
     } else {
+      // General messages (Achievements, etc)
       el.style.left = '50%';
-      el.style.top = '50%';
+      // Start from 50% and move down. 
+      // Assuming CSS handles centering transform: translate(-50%, -50%)
+      // We adjust the top % slightly or use pixels to stack.
+      // Using calc to combine percentage and pixel offset is safest.
+      el.style.top = `calc(50% + ${verticalOffset}px)`;
       el.classList.add('float-center');
     }
 
@@ -1361,6 +1379,53 @@ async function startCustomGame() {
     }
   }
 
+  // --- Share Logic ---
+  function shareResult(platform) {
+    const score = state.score.toLocaleString();
+    const stage = state.stage;
+    
+    // ניסוח ההודעה
+    let text = '';
+    if (state.isDailyMode) {
+      text = `🔥 השגתי ${score} נקודות באתגר היומי של טריוויה ראש (שלב ${stage})! נראה אתכם מנצחים אותי! 🧠🏃‍♂️`;
+    } else {
+      text = `🔥 השגתי ${score} נקודות במשחק טריוויה ראש! בואו לשחק בנושאים שאתם בוחרים! 🧠🏃‍♂️`;
+    }
+
+    const url = window.location.origin; // הכתובת של האתר שלך
+    const hashtags = 'TriviaRush,טריוויה,משחק';
+
+    switch (platform) {
+      case 'whatsapp':
+        // בווצאפ אנחנו שולחים טקסט + לינק
+        window.open(`https://wa.me/?text=${encodeURIComponent(text + ' ' + url)}`, '_blank');
+        break;
+      
+      case 'twitter':
+        window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}&hashtags=${hashtags}`, '_blank');
+        break;
+      
+      case 'facebook':
+        // פייסבוק לא מאפשרת טקסט מותאם אישית ב-API, רק URL
+        window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`, '_blank');
+        break;
+
+      case 'native':
+        // שימוש ב-Web Share API (בעיקר למובייל - פותח את מגירת השיתוף של הטלפון)
+        if (navigator.share) {
+          navigator.share({
+            title: 'Trivia Rush',
+            text: text,
+            url: url
+          }).catch(console.error);
+        } else {
+          // Fallback לווצאפ אם אין Native Share
+          shareResult('whatsapp');
+        }
+        break;
+    }
+  }
+
   function switchScreen(id) {
     document.querySelectorAll('.screen').forEach((s) => s.classList.remove('active'));
     const screen = document.getElementById(id);
@@ -1385,8 +1450,8 @@ async function startCustomGame() {
   window.returnToMenu = returnToMenu;
   window.backToLeaderboard = backToLeaderboard;
   window.addCustomTopic = addCustomTopic;
-  window.toggleGoogleSearch = toggleGoogleSearch;
   window.showPlayerDetails = showPlayerDetails;
   window.removeCustomTopic = removeCustomTopic;
+  window.shareResult = shareResult; // הוספנו את החשיפה כאן
 
 })();

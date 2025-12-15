@@ -1,3 +1,5 @@
+// trivia-rush\app\api\shop\route.ts
+
 import { NextResponse } from 'next/server';
 import { supabaseServer } from '../../../utils/supabase';
 
