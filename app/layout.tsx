@@ -11,7 +11,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'Trivia Rush - מירוץ הידע',
     description: 'האם תצליחו לענות על 50 שאלות לפני שייגמר הזמן?',
-    url: 'https://trivia-rush.vercel.app', // החלף בכתובת האמיתית שלך כשתעלה לאוויר
+    url: 'https://trivi.fun', // החלף בכתובת האמיתית שלך כשתעלה לאוויר
     siteName: 'Trivia Rush',
     locale: 'he_IL',
     type: 'website',

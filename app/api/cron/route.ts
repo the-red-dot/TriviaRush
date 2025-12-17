@@ -1,5 +1,7 @@
 // trivia-rush\app\api\cron\route.ts
 
+// trivia-rush\app\api\cron\route.ts
+
 import { NextResponse } from 'next/server';
 import { supabaseServer } from '../../../utils/supabase';
 import { ALL_SUB_TOPICS } from './topics';
@@ -10,23 +12,24 @@ export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
 
 const TOTAL_TARGET_QUESTIONS = 50;
-const BATCH_WAIT_MINUTES = 5;
+// CHANGED: Increased wait time to let API cool down between batches
+const BATCH_WAIT_MINUTES = 10; 
 const PRE_GENERATE_HOUR = 21;
-const HISTORY_WINDOW_DAYS = 7; // חלון זמן לבדיקת כפילויות
+// CHANGED: Reduced history window to 3 days to save Tokens and avoid 429
+const HISTORY_WINDOW_DAYS = 3; 
 
 // --- Utility Functions ---
 
-// 1. נרמול טקסט להשוואה חכמה (Exact Match)
 function normalizeText(text: string): string {
   return text
     .trim()
     .toLowerCase()
-    .replace(/[.,/#!$%^&*;:{}=\-_`~()?"']/g, "") // הסרת פיסוק
-    .replace(/\s{2,}/g, " "); // הסרת רווחים כפולים
+    .replace(/[.,/#!$%^&*;:{}=\-_`~()?"']/g, "")
+    .replace(/\s{2,}/g, " ");
 }
 
-// 2. פונקציית Retry לבקשות רשת
-async function fetchWithRetry(url: string, options: any, retries = 3, initialDelay = 1000) {
+// CHANGED: Improved Retry Logic for 429 errors
+async function fetchWithRetry(url: string, options: any, retries = 3, initialDelay = 5000) {
   let delay = initialDelay;
   
   for (let i = 0; i < retries; i++) {
@@ -35,11 +38,15 @@ async function fetchWithRetry(url: string, options: any, retries = 3, initialDel
       
       if (response.ok) return response;
       
-      if (response.status === 503 || response.status === 429 || response.status >= 500) {
-        console.warn(`[Cron API] Attempt ${i + 1} failed (${response.status}). Retrying...`);
+      // If rate limited (429) or server error (5xx)
+      if (response.status === 429 || response.status >= 500 || response.status === 503) {
+        console.warn(`[Cron API] Attempt ${i + 1} failed (${response.status}). Cooling down for ${delay/1000}s...`);
+        
         if (i === retries - 1) throw new Error(`Gemini API Error: ${response.status} ${response.statusText}`);
         
+        // Wait
         await new Promise(resolve => setTimeout(resolve, delay));
+        // Exponential backoff: 5s -> 10s -> 20s
         delay *= 2; 
         continue;
       }
@@ -90,22 +97,17 @@ function validateAndFixQuestions(questions: any[]): any[] {
     if (typeof q.question !== 'string' || q.question.length < 3) return false;
     if (!q.category) q.category = 'כללי';
     
-    // וידוא שדה difficulty
     if (!['easy', 'medium', 'hard'].includes(q.difficulty)) {
         q.difficulty = 'medium'; 
     }
 
-    // אפשרויות: מינימום 2 (נכון/לא נכון), מקסימום 3
     if (!Array.isArray(q.options) || q.options.length < 2 || q.options.length > 3) return false;
-    // אינדקס תקין
     if (typeof q.correctIndex !== 'number' || q.correctIndex < 0 || q.correctIndex >= q.options.length) return false;
-    // תוכן אפשרויות
     if (q.options.some((o: any) => !o || typeof o !== 'string' || o.trim() === '')) return false;
     return true;
   });
 }
 
-// 5. מנגנון שליפת היסטוריה מורחב (עבור סמנטיקה + exact match)
 type HistoryData = {
     exactSet: Set<string>;
     byDifficulty: {
@@ -118,12 +120,10 @@ type HistoryData = {
 async function get7DayHistory(targetDate: string): Promise<HistoryData> {
   if (!supabaseServer) return { exactSet: new Set(), byDifficulty: { easy: [], medium: [], hard: [] } };
 
-  // חישוב תאריך התחלה לחלון ההיסטוריה
   const historyStart = new Date();
   historyStart.setDate(historyStart.getDate() - HISTORY_WINDOW_DAYS);
   const historyStartStr = formatDate(historyStart);
 
-  // שליפת האתגרים בטווח הזמן
   const { data: challenges } = await supabaseServer
     .from('daily_challenges')
     .select('questions')
@@ -138,10 +138,8 @@ async function get7DayHistory(targetDate: string): Promise<HistoryData> {
       if (Array.isArray(row.questions)) {
         row.questions.forEach((q: any) => {
            if (q && q.question) {
-             // 1. שמירה ל-Exact Match
              exactSet.add(normalizeText(q.question));
              
-             // 2. שמירה להשוואה סמנטית (לפי רמת קושי)
              const diff = q.difficulty || 'medium';
              if (byDifficulty[diff]) {
                  byDifficulty[diff].push(q.question);
@@ -152,7 +150,7 @@ async function get7DayHistory(targetDate: string): Promise<HistoryData> {
     });
   }
   
-  console.log(`[Cron] History loaded. Exact entries: ${exactSet.size}.`);
+  console.log(`[Cron] History loaded (Last ${HISTORY_WINDOW_DAYS} days). Exact entries: ${exactSet.size}.`);
   return { exactSet, byDifficulty };
 }
 
@@ -162,25 +160,17 @@ async function filterSemanticDuplicates(
     history: HistoryData['byDifficulty'], 
     apiKey: string
 ): Promise<number[]> {
-    // אם אין מספיק היסטוריה או שאלות חדשות, דלג
     if (newQuestions.length === 0) return [];
-    
-    // אופטימיזציה: אם ההיסטוריה ריקה לגמרי, אין מה לבדוק
     if (history.easy.length === 0 && history.medium.length === 0 && history.hard.length === 0) return [];
 
     console.log(`[Cron] Starting Semantic Check for ${newQuestions.length} candidates...`);
 
-    // בניית פרומפט ממוקד לזיהוי כפילויות משמעות
-    // אנחנו נשלח למודל רשימה ממוספרת של שאלות חדשות, ורשימה של שאלות ישנות
-    // המודל יחזיר רק את האינדקסים של החדשות שצריך לפסול.
-    
     const candidatesList = newQuestions.map((q, i) => `${i}. [${q.difficulty}] ${q.question}`).join('\n');
     
-    // לוקחים דגימה מההיסטוריה (כדי לא לפוצץ את הפרומפט), בעיקר מהימים האחרונים
-    // נבנה הקשר לפי רמות קושי
-    const contextEasy = history.easy.slice(-50).join(' | ');
-    const contextMedium = history.medium.slice(-50).join(' | ');
-    const contextHard = history.hard.slice(-50).join(' | ');
+    // CHANGED: Reduced context size from 50 to 30 to save tokens and avoid 429
+    const contextEasy = history.easy.slice(-30).join(' | ');
+    const contextMedium = history.medium.slice(-30).join(' | ');
+    const contextHard = history.hard.slice(-30).join(' | ');
 
     const prompt = `
     Task: Identify semantic duplicates in a trivia database.
@@ -218,7 +208,8 @@ async function filterSemanticDuplicates(
                     contents: [{ parts: [{ text: prompt }] }],
                     generationConfig: { responseMimeType: "application/json" }
                 }),
-            }, 1 // ניסיון אחד מספיק לסינון, אם נכשל - נוותר כדי לא לתקוע את התהליך
+            }, 
+            1 // Still 1 retry here is enough as it's optional
         );
 
         const data = await response.json();
@@ -313,9 +304,12 @@ export async function GET(req: Request) {
     // בדיקת זמן המתנה
     const now = new Date();
     const nextRun = new Date(challenge.next_batch_at);
+    
     if (now < nextRun) {
       const waitMinutes = Math.ceil((nextRun.getTime() - now.getTime()) / 60000);
-      if (waitMinutes <= BATCH_WAIT_MINUTES) {
+      // Only strictly enforce wait if we are not in "Emergency Fix" mode (batch 0)
+      if (challenge.current_batch > 0) {
+          console.log(`[Cron] Waiting for cool-down. ${waitMinutes} mins left.`);
           return NextResponse.json({ message: `Waiting for next batch slot. ${waitMinutes} mins left.` });
       }
     }
@@ -335,15 +329,12 @@ export async function GET(req: Request) {
     currentQuestions.forEach((q: any) => {
         if (q && q.question) {
             exactSet.add(normalizeText(q.question));
-            // לא מוסיפים ל-byDifficulty כדי לא לבלבל את המודל עם שאלות מהיום בנגלה קודמת,
-            // אבל ה-exactSet יתפוס אותן.
         }
     });
 
 
     // --- הגדרת יעדים (Targets) ---
-    // אנו מבקשים "Buffer" (תוספת) כדי שיהיה לנו מרחב סינון
-    const BUFFER_FACTOR = 1.4; // נבקש 40% יותר שאלות
+    const BUFFER_FACTOR = 1.4; 
     const QUESTIONS_PER_BATCH = 25;
     
     let targetEasy = 0;
@@ -419,7 +410,9 @@ export async function GET(req: Request) {
                         contents: [{ parts: [{ text: prompt }] }],
                         generationConfig: { responseMimeType: "application/json" }
                     }),
-                }
+                },
+                3, // Retries
+                5000 // Initial Delay 5s
             );
             const data = await geminiResponse.json();
             const text = data.candidates[0].content.parts[0].text;
@@ -438,21 +431,16 @@ export async function GET(req: Request) {
     let candidates = validateAndFixQuestions(generatedQuestionsRaw);
     
     // --- שלב סינון 2: Exact Match (מהיר) ---
-    // מסננים מראש את מה שבוודאות כפול כדי לחסוך טוקנים ל-AI
     candidates = candidates.filter(q => {
         const normQ = normalizeText(q.question);
         if (exactSet.has(normQ)) {
-             console.log(`[Cron] Exact duplicate rejected: "${q.question}"`);
              return false;
         }
         return true;
     });
 
     // --- שלב סינון 3: Semantic Check (חכם - Gemini) ---
-    // נשלח את המועמדים שנשארו לבדיקת משמעות מול ההיסטוריה
     const rejectedIndices = await filterSemanticDuplicates(candidates, byDifficulty, apiKey);
-    
-    // יצירת סט של אינדקסים לפסילה לגישה מהירה
     const rejectedSet = new Set(rejectedIndices);
 
     // --- מילוי הדליים (Bucket Fill) ---
@@ -464,13 +452,10 @@ export async function GET(req: Request) {
     for (let i = 0; i < candidates.length; i++) {
         const q = candidates[i];
         
-        // בדיקה האם המודל פסל את השאלה הזו סמנטית
         if (rejectedSet.has(i)) {
-             console.log(`[Cron] Semantic duplicate rejected: "${q.question}"`);
              continue;
         }
 
-        // בדיקת מקום בדליים
         let added = false;
         if (q.difficulty === 'easy' && countEasy < targetEasy) {
             finalBatch.push(q);
@@ -486,7 +471,6 @@ export async function GET(req: Request) {
             added = true;
         }
         
-        // עדכון סט לוקלי (למניעת כפילות פנימית בתוך הנגלה הנוכחית)
         if (added) {
              const normQ = normalizeText(q.question);
              exactSet.add(normQ); 
@@ -524,13 +508,14 @@ export async function GET(req: Request) {
                         contents: [{ parts: [{ text: refillPrompt }] }],
                         generationConfig: { responseMimeType: "application/json" }
                     }),
-                }, 1
+                }, 
+                2, // Less retries for refill
+                5000
             );
             const refillData = await refillRes.json();
             const refillRaw = JSON.parse(refillData.candidates[0].content.parts[0].text);
             const refillValid = validateAndFixQuestions(refillRaw);
 
-            // הוספת ההשלמות (כאן מוותרים על בדיקה סמנטית כבדה כדי לא לחרוג מזמן, מסתפקים ב-Exact)
             for (const q of refillValid) {
                 const normQ = normalizeText(q.question);
                 if (exactSet.has(normQ)) continue;
@@ -552,13 +537,16 @@ export async function GET(req: Request) {
     const updatePayload: any = {
       questions: updatedQuestions,
       current_batch: nextBatchNum,
-      next_batch_at: nextBatchNum < 2 ? nextRunTime.toISOString() : now.toISOString(),
+      // Always set delay for next run to prevent 429
+      next_batch_at: nextRunTime.toISOString(), 
       last_log: `Batch ${nextBatchNum}: Added ${finalBatch.length} unique questions.`
     };
 
     if (nextBatchNum === 2 || updatedQuestions.length >= TOTAL_TARGET_QUESTIONS) {
       updatePayload.status = 'complete';
       updatePayload.last_log = `READY! Total: ${updatedQuestions.length}`;
+      // No next batch needed if complete, but good to set a future date just in case
+      updatePayload.next_batch_at = new Date(now.getTime() + 12 * 60 * 60 * 1000).toISOString(); 
     }
 
     await supabaseServer
