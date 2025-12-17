@@ -696,9 +696,8 @@ export default function HomePage() {
                         </div>
                     </div>
                 ) : (
-                    // --- מצב מוכן ---
                     <div style={{fontSize:'0.9rem', color:'#ddd', marginBottom:'10px'}}>
-                        50 שאלות מאתגרות ב-2 נגלות. כולם מקבלים את אותו אתגר!
+                        50 שאלות חדשות, ניסיון אחד. האם יש לך את מה שנדרש כדי לכבוש את הפסגה? 🏔️🏆
                     </div>
                 )}
 
