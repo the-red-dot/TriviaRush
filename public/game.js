@@ -1381,19 +1381,23 @@
 
 // --- Share Logic ---
   function shareResult(platform) {
-    const score = state.score.toLocaleString();
+    // FIX: Calculate the final weighted score exactly like in gameOver
+    const money = state.score;
+    const bonus = state.totalCorrect * GAME_CONFIG.scorePerCorrectForRanking;
+    const finalWeightedScore = money + bonus;
+
+    const scoreStr = finalWeightedScore.toLocaleString();
     const stage = state.stage;
     
-    // בסיס הטקסט ללא ה-URL (כדי למנוע כפילות בטוויטר/פייסבוק)
+    // בסיס הטקסט ללא ה-URL
     let textBase = '';
     if (state.isDailyMode) {
-      textBase = `🔥 השגתי ${score} נקודות באתגר היומי של טריוויה ראש (שלב ${stage})! נראה אתכם מנצחים אותי! 🧠🏃‍♂️`;
+      textBase = `🔥 השגתי ${scoreStr} נקודות באתגר היומי של טריוויה ראש (שלב ${stage})! נראה אתכם מנצחים אותי! 🧠🏃‍♂️`;
     } else {
-      textBase = `🔥 השגתי ${score} נקודות במשחק טריוויה ראש! בואו לשחק בנושאים שאתם בוחרים! 🧠🏃‍♂️`;
+      textBase = `🔥 השגתי ${scoreStr} נקודות במשחק טריוויה ראש! בואו לשחק בנושאים שאתם בוחרים! 🧠🏃‍♂️`;
     }
 
-    // הכתובת של האתר שלך (חשוב שתהיה מדויקת כדי שה-Card יעבוד)
-    // אם אתה ב-Localhost זה לא יציג תמונה בטוויטר/פייסבוק, רק ב-Production
+    // הכתובת של האתר שלך
     const url = window.location.origin; 
     const hashtags = 'TriviaRush,טריוויה,משחק';
 
@@ -1405,19 +1409,17 @@
       
       case 'twitter':
         // בטוויטר אנחנו מפרידים בין הטקסט ללינק כדי שה-Card ייווצר תקין
-        // השימוש ב-hashtags ללא סולמית (#) בפרמטר
         const twitterUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(textBase)}&url=${encodeURIComponent(url)}&hashtags=${hashtags}`;
         window.open(twitterUrl, '_blank');
         break;
       
       case 'facebook':
         // פייסבוק לוקחת את המידע (תמונה/כותרת) מה-Meta Tags של ה-URL בלבד.
-        // הטקסט שהמשתמש כותב הוא ידני, אבל הלינק מצורף אוטומטית.
         window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`, '_blank');
         break;
 
       case 'native':
-        // שימוש ב-Web Share API (בעיקר למובייל - פותח את מגירת השיתוף של הטלפון)
+        // שימוש ב-Web Share API
         if (navigator.share) {
           navigator.share({
             title: 'Trivia Rush',
@@ -1425,7 +1427,7 @@
             url: url
           }).catch(console.error);
         } else {
-          // Fallback לווצאפ אם אין Native Share (למשל בדסקטופ)
+          // Fallback לווצאפ אם אין Native Share
           shareResult('whatsapp');
         }
         break;
@@ -1458,6 +1460,6 @@
   window.addCustomTopic = addCustomTopic;
   window.showPlayerDetails = showPlayerDetails;
   window.removeCustomTopic = removeCustomTopic;
-  window.shareResult = shareResult; // הוספנו את החשיפה כאן
+  window.shareResult = shareResult; 
 
 })();

@@ -1,3 +1,5 @@
+// trivia-rush\app\api\cron\route.ts
+
 import { NextResponse } from 'next/server';
 import { supabaseServer } from '../../../utils/supabase';
 import { ALL_SUB_TOPICS } from './topics';
