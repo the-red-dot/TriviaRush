@@ -8,57 +8,125 @@ export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
 
 const TOTAL_TARGET_QUESTIONS = 50;
-// UPDATE: Increased to 15 minutes. 
-// Since cron runs every 10 mins, this forces a skip of one cycle to let API cool down.
 const BATCH_WAIT_MINUTES = 15; 
 const PRE_GENERATE_HOUR = 21;
-// UPDATE: Reduced history to 3 days to save Token Quota (TPM)
 const HISTORY_WINDOW_DAYS = 3; 
+
+// --- API Key Rotation Config --
+// Collect available keys (Limit to 3)
+const API_KEYS = [
+    process.env.GEMINI_API_KEY,
+    process.env.GEMINI_API_KEY_2,
+    process.env.GEMINI_API_KEY_3
+].filter(key => key && key.trim().length > 0) as string[];
+
+// Models to try in order
+const MODELS_TO_TRY = ["gemini-2.5-flash", "gemini-2.5-flash-preview-09-2025"];
 
 // --- Utility Functions ---
 
-// 1. נרמול טקסט להשוואה חכמה (Exact Match)
 function normalizeText(text: string): string {
   return text
     .trim()
     .toLowerCase()
-    .replace(/[.,/#!$%^&*;:{}=\-_`~()?"']/g, "") // הסרת פיסוק
-    .replace(/\s{2,}/g, " "); // הסרת רווחים כפולים
+    .replace(/[.,/#!$%^&*;:{}=\-_`~()?"']/g, "")
+    .replace(/\s{2,}/g, " ");
 }
 
-// 2. פונקציית Retry לבקשות רשת (מעודכנת ל-Backoff איטי יותר)
-async function fetchWithRetry(url: string, options: any, retries = 3, initialDelay = 2000) {
-  let delay = initialDelay;
-  
-  for (let i = 0; i < retries; i++) {
-    try {
-      const response = await fetch(url, options);
-      
-      if (response.ok) return response;
-      
-      // אם יש שגיאת עומס (429) או שרת (5xx), נחכה יותר זמן
-      if (response.status === 503 || response.status === 429 || response.status >= 500) {
-        console.warn(`[Cron API] Attempt ${i + 1} failed (${response.status}). Cooling down for ${delay}ms...`);
-        if (i === retries - 1) throw new Error(`Gemini API Error: ${response.status} ${response.statusText}`);
-        
-        await new Promise(resolve => setTimeout(resolve, delay));
-        delay *= 2; // Exponential backoff: 2s -> 4s -> 8s
-        continue;
-      }
-      
-      throw new Error(`Gemini API Error: ${response.status} ${response.statusText}`);
-      
-    } catch (error) {
-      console.error(`[Cron API] Attempt ${i + 1} Error:`, error);
-      if (i === retries - 1) throw error;
-      await new Promise(resolve => setTimeout(resolve, delay));
-      delay *= 2;
+// Low-level fetch that handles 5xx retries but throws immediately on 429 (Quota)
+async function fetchWithBackoff(url: string, options: any, retries = 2, initialDelay = 1000) {
+    let delay = initialDelay;
+    
+    for (let i = 0; i <= retries; i++) {
+        try {
+            const response = await fetch(url, options);
+            
+            // If success, return immediately
+            if (response.ok) return response;
+
+            // If Rate Limit (429), throw immediately to trigger key rotation
+            if (response.status === 429) {
+                throw new Error('QUOTA_EXHAUSTED');
+            }
+
+            // If Server Error (5xx), wait and retry
+            if (response.status >= 500) {
+                if (i === retries) throw new Error(`Server Error: ${response.status}`);
+                console.warn(`[Cron API] 5xx Error (Attempt ${i + 1}). Retrying in ${delay}ms...`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+                delay *= 2;
+                continue;
+            }
+
+            // Client Error (4xx) - throw immediately
+            throw new Error(`API Error: ${response.status} ${response.statusText}`);
+
+        } catch (error: any) {
+            // Re-throw Quota errors immediately
+            if (error.message === 'QUOTA_EXHAUSTED') throw error;
+            
+            // If it's the last retry or a fatal network error, throw
+            if (i === retries) throw error;
+            
+            // Network error retry
+            await new Promise(resolve => setTimeout(resolve, delay));
+            delay *= 2;
+        }
     }
-  }
-  throw new Error('Max retries reached for Gemini API');
+    throw new Error('Max retries reached');
 }
 
-// 3. עזרים לזמן
+// High-level generator that handles Key Rotation AND Model Fallback
+async function generateWithRotation(prompt: string, jsonMode = true): Promise<any> {
+    if (API_KEYS.length === 0) throw new Error('No API Keys configured!');
+
+    let lastError = null;
+
+    // Loop through Keys
+    for (let k = 0; k < API_KEYS.length; k++) {
+        const apiKey = API_KEYS[k];
+        
+        // Loop through Models
+        for (const model of MODELS_TO_TRY) {
+            try {
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+                
+                const response = await fetchWithBackoff(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: prompt }] }],
+                        generationConfig: jsonMode ? { responseMimeType: "application/json" } : undefined
+                    })
+                });
+
+                const data = await response.json();
+                if (!data.candidates?.[0]?.content?.parts?.[0]?.text) {
+                    throw new Error(`Invalid response format from ${model}`);
+                }
+                
+                // Success! Return the text content
+                return data.candidates[0].content.parts[0].text;
+
+            } catch (e: any) {
+                lastError = e;
+                
+                // If Quota Exhausted, Log and Break the Model Loop -> Switches to Next Key
+                if (e.message === 'QUOTA_EXHAUSTED') {
+                    console.warn(`[Cron] Key ${k + 1}/${API_KEYS.length} exhausted (429). Switching to next key...`);
+                    break; // Break inner loop (models), continue outer loop (keys)
+                }
+
+                // If not quota (e.g. Model overloaded or invalid response), log and try next model
+                console.warn(`[Cron] Model ${model} failed with key ${k + 1}: ${e.message}`);
+            }
+        }
+    }
+
+    throw new Error(`All keys and models failed. Last error: ${lastError?.message}`);
+}
+
+
 function getIsraelTime() {
   const now = new Date();
   try {
@@ -84,7 +152,6 @@ function shuffleArray(array: string[]) {
   return arr;
 }
 
-// 4. ולידציה בסיסית לשאלות
 function validateAndFixQuestions(questions: any[]): any[] {
   if (!Array.isArray(questions)) return [];
   return questions.filter(q => {
@@ -92,22 +159,18 @@ function validateAndFixQuestions(questions: any[]): any[] {
     if (typeof q.question !== 'string' || q.question.length < 3) return false;
     if (!q.category) q.category = 'כללי';
     
-    // וידוא שדה difficulty
     if (!['easy', 'medium', 'hard'].includes(q.difficulty)) {
         q.difficulty = 'medium'; 
     }
 
-    // אפשרויות: מינימום 2 (נכון/לא נכון), מקסימום 3
     if (!Array.isArray(q.options) || q.options.length < 2 || q.options.length > 3) return false;
-    // אינדקס תקין
     if (typeof q.correctIndex !== 'number' || q.correctIndex < 0 || q.correctIndex >= q.options.length) return false;
-    // תוכן אפשרויות
     if (q.options.some((o: any) => !o || typeof o !== 'string' || o.trim() === '')) return false;
     return true;
   });
 }
 
-// 5. מנגנון שליפת היסטוריה מורחב (עבור סמנטיקה + exact match)
+// 5. מנגנון שליפת היסטוריה מורחב
 type HistoryData = {
     exactSet: Set<string>;
     byDifficulty: {
@@ -120,12 +183,10 @@ type HistoryData = {
 async function getHistory(targetDate: string): Promise<HistoryData> {
   if (!supabaseServer) return { exactSet: new Set(), byDifficulty: { easy: [], medium: [], hard: [] } };
 
-  // חישוב תאריך התחלה לחלון ההיסטוריה (קוצר ל-3 ימים)
   const historyStart = new Date();
   historyStart.setDate(historyStart.getDate() - HISTORY_WINDOW_DAYS);
   const historyStartStr = formatDate(historyStart);
 
-  // שליפת האתגרים בטווח הזמן
   const { data: challenges } = await supabaseServer
     .from('daily_challenges')
     .select('questions')
@@ -140,10 +201,8 @@ async function getHistory(targetDate: string): Promise<HistoryData> {
       if (Array.isArray(row.questions)) {
         row.questions.forEach((q: any) => {
            if (q && q.question) {
-             // 1. שמירה ל-Exact Match
              exactSet.add(normalizeText(q.question));
              
-             // 2. שמירה להשוואה סמנטית (לפי רמת קושי)
              const diff = q.difficulty || 'medium';
              if (byDifficulty[diff]) {
                  byDifficulty[diff].push(q.question);
@@ -158,24 +217,17 @@ async function getHistory(targetDate: string): Promise<HistoryData> {
   return { exactSet, byDifficulty };
 }
 
-// 6. פונקציית סינון סמנטי (AI Judge)
+// 6. פונקציית סינון סמנטי (AI Judge) - מעודכנת להשתמש ברוטציה
 async function filterSemanticDuplicates(
     newQuestions: any[], 
-    history: HistoryData['byDifficulty'], 
-    apiKey: string
+    history: HistoryData['byDifficulty']
 ): Promise<number[]> {
-    // אם אין מספיק היסטוריה או שאלות חדשות, דלג
     if (newQuestions.length === 0) return [];
-    
-    // אופטימיזציה: אם ההיסטוריה ריקה לגמרי, אין מה לבדוק
     if (history.easy.length === 0 && history.medium.length === 0 && history.hard.length === 0) return [];
 
     console.log(`[Cron] Starting Semantic Check for ${newQuestions.length} candidates...`);
 
-    // בניית פרומפט ממוקד לזיהוי כפילויות משמעות
     const candidatesList = newQuestions.map((q, i) => `${i}. [${q.difficulty}] ${q.question}`).join('\n');
-    
-    // UPDATE: לוקחים דגימה קטנה יותר מההיסטוריה (30 במקום 50) כדי לחסוך טוקנים
     const contextEasy = history.easy.slice(-30).join(' | ');
     const contextMedium = history.medium.slice(-30).join(' | ');
     const contextHard = history.hard.slice(-30).join(' | ');
@@ -207,20 +259,8 @@ async function filterSemanticDuplicates(
     `;
 
     try {
-        const response = await fetchWithRetry(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-            {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    contents: [{ parts: [{ text: prompt }] }],
-                    generationConfig: { responseMimeType: "application/json" }
-                }),
-            }, 1 // ניסיון אחד מספיק לסינון, אם נכשל - נוותר כדי לא לתקוע את התהליך
-        );
-
-        const data = await response.json();
-        const text = data.candidates[0].content.parts[0].text;
+        // Use the new Rotation Logic here
+        const text = await generateWithRotation(prompt, true);
         const rejectedIndices = JSON.parse(text);
         
         if (Array.isArray(rejectedIndices)) {
@@ -228,7 +268,7 @@ async function filterSemanticDuplicates(
             return rejectedIndices;
         }
     } catch (e) {
-        console.warn('[Cron] Semantic check failed or timed out. Proceeding without semantic filter.', e);
+        console.warn('[Cron] Semantic check failed. Proceeding without filter to ensure continuity.', e);
     }
     
     return [];
@@ -240,8 +280,10 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'Supabase config missing' }, { status: 500 });
   }
 
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return NextResponse.json({ error: 'Server API Key missing' }, { status: 500 });
+  // Basic check to ensure at least one key exists
+  if (API_KEYS.length === 0) {
+      return NextResponse.json({ error: 'Server API Keys missing' }, { status: 500 });
+  }
 
   try {
     const nowIL = getIsraelTime();
@@ -277,15 +319,12 @@ export async function GET(req: Request) {
       }
     }
 
-    // --- מכאן והלאה: עובדים על targetDate שנבחר ---
-
     let { data: challenge } = await supabaseServer
       .from('daily_challenges')
       .select('*')
       .eq('challenge_date', targetDate)
       .single();
 
-    // אתחול רשומה אם לא קיימת
     if (!challenge) {
       console.log(`[Cron] Initializing record for ${targetDate}`);
       const { data: newRecord, error: insertError } = await supabaseServer
@@ -308,11 +347,10 @@ export async function GET(req: Request) {
       return NextResponse.json({ message: `Challenge for ${targetDate} is already complete.` });
     }
 
-    // --- בדיקת זמן המתנה (Cooldown Check) ---
+    // --- בדיקת זמן המתנה ---
     const now = new Date();
     const nextRun = new Date(challenge.next_batch_at);
     
-    // בדיקה קריטית: אם לא עבר הזמן - יוצאים מיד כדי לתת ל-API לנוח
     if (now < nextRun) {
       const waitMinutes = Math.ceil((nextRun.getTime() - now.getTime()) / 60000);
       return NextResponse.json({ message: `Waiting for cooldown. ${waitMinutes} mins left until next batch.` });
@@ -324,11 +362,10 @@ export async function GET(req: Request) {
        return NextResponse.json({ message: 'Marked as complete (Safety)' });
     }
 
-    // --- טעינת היסטוריה (Exact + Semantic) ---
+    // --- טעינת היסטוריה ---
     const historyData = await getHistory(targetDate);
     const { exactSet, byDifficulty } = historyData;
     
-    // הוספת השאלות שכבר קיימות באתגר הנוכחי (למניעת כפילות באותו יום)
     const currentQuestions = challenge.questions || [];
     currentQuestions.forEach((q: any) => {
         if (q && q.question) {
@@ -336,35 +373,28 @@ export async function GET(req: Request) {
         }
     });
 
-
-    // --- הגדרת יעדים (Targets) ---
-    // אנו מבקשים "Buffer" (תוספת) כדי שיהיה לנו מרחב סינון
-    const BUFFER_FACTOR = 1.4; // נבקש 40% יותר שאלות
+    // --- הגדרת יעדים ---
+    const BUFFER_FACTOR = 1.4; 
     const QUESTIONS_PER_BATCH = 25;
     
     let targetEasy = 0;
     let targetMedium = 0;
     let targetHard = 0;
-
     let promptInstructions = '';
 
     if (nextBatchNum === 1) {
-        // נגלה 1: יעד 15 Easy, 10 Medium
         targetEasy = 15;
         targetMedium = 10;
         targetHard = 0;
-        
         promptInstructions = `
         עליך לייצר כ-35 שאלות (כולל ספייר לסינון):
         - כ-20 שאלות ברמת "easy".
         - כ-15 שאלות ברמת "medium".
         `;
     } else {
-        // נגלה 2: יעד 10 Medium, 15 Hard
         targetEasy = 0;
         targetMedium = 10;
         targetHard = 15;
-
         promptInstructions = `
         עליך לייצר כ-35 שאלות (כולל ספייר לסינון):
         - כ-15 שאלות ברמת "medium".
@@ -375,7 +405,7 @@ export async function GET(req: Request) {
     const shuffledTopics = shuffleArray(ALL_SUB_TOPICS);
     const selectedTopics = shuffledTopics.slice(0, Math.floor(QUESTIONS_PER_BATCH * BUFFER_FACTOR));
 
-    console.log(`[Cron] Batch ${nextBatchNum} for ${targetDate}. Requesting with Buffer.`);
+    console.log(`[Cron] Batch ${nextBatchNum} for ${targetDate}. Keys available: ${API_KEYS.length}`);
 
     const prompt = `
       משימה: צור מאגר שאלות טריוויה בעברית למשחק מהיר.
@@ -399,42 +429,25 @@ export async function GET(req: Request) {
       ]
     `;
 
-    // --- ביצוע הבקשה ל-Gemini ---
+    // --- ביצוע הבקשה ל-Gemini (עם רוטציה) ---
     let generatedQuestionsRaw: any[] = [];
     
-    const modelsToTry = ["gemini-2.5-flash", "gemini-2.5-flash-preview-09-2025"];
-    
-    for (const model of modelsToTry) {
-        try {
-            const geminiResponse = await fetchWithRetry(
-                `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        contents: [{ parts: [{ text: prompt }] }],
-                        generationConfig: { responseMimeType: "application/json" }
-                    }),
-                }
-            );
-            const data = await geminiResponse.json();
-            const text = data.candidates[0].content.parts[0].text;
-            generatedQuestionsRaw = JSON.parse(text);
-            if (generatedQuestionsRaw.length > 0) break;
-        } catch (e) {
-            console.warn(`[Cron] Model ${model} failed:`, e);
-        }
+    try {
+        const text = await generateWithRotation(prompt, true);
+        generatedQuestionsRaw = JSON.parse(text);
+    } catch (e) {
+        console.error('[Cron] Generation failed:', e);
+        throw new Error('All Gemini keys/models failed to generate valid JSON');
     }
 
-    if (generatedQuestionsRaw.length === 0) {
-        throw new Error('All Gemini models failed to generate valid JSON');
+    if (!Array.isArray(generatedQuestionsRaw) || generatedQuestionsRaw.length === 0) {
+        throw new Error('Gemini output invalid format');
     }
 
     // --- שלב סינון 1: ולידציה טכנית ---
     let candidates = validateAndFixQuestions(generatedQuestionsRaw);
     
-    // --- שלב סינון 2: Exact Match (מהיר) ---
-    // מסננים מראש את מה שבוודאות כפול כדי לחסוך טוקנים ל-AI
+    // --- שלב סינון 2: Exact Match ---
     candidates = candidates.filter(q => {
         const normQ = normalizeText(q.question);
         if (exactSet.has(normQ)) {
@@ -444,16 +457,12 @@ export async function GET(req: Request) {
         return true;
     });
 
-    // --- שלב סינון 3: Semantic Check (חכם - Gemini) ---
-    // השהייה קטנה לפני הבקשה הכבדה הבאה (כדי לתת למכסה להתאושש מעט)
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    const rejectedIndices = await filterSemanticDuplicates(candidates, byDifficulty, apiKey);
-    
-    // יצירת סט של אינדקסים לפסילה לגישה מהירה
+    // --- שלב סינון 3: Semantic Check (עם רוטציה) ---
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    const rejectedIndices = await filterSemanticDuplicates(candidates, byDifficulty);
     const rejectedSet = new Set(rejectedIndices);
 
-    // --- מילוי הדליים (Bucket Fill) ---
+    // --- מילוי הדליים ---
     const finalBatch: any[] = [];
     let countEasy = 0;
     let countMedium = 0;
@@ -462,13 +471,11 @@ export async function GET(req: Request) {
     for (let i = 0; i < candidates.length; i++) {
         const q = candidates[i];
         
-        // בדיקה האם המודל פסל את השאלה הזו סמנטית
         if (rejectedSet.has(i)) {
              console.log(`[Cron] Semantic duplicate rejected: "${q.question}"`);
              continue;
         }
 
-        // בדיקת מקום בדליים
         let added = false;
         if (q.difficulty === 'easy' && countEasy < targetEasy) {
             finalBatch.push(q);
@@ -484,7 +491,6 @@ export async function GET(req: Request) {
             added = true;
         }
         
-        // עדכון סט לוקלי (למניעת כפילות פנימית בתוך הנגלה הנוכחית)
         if (added) {
              const normQ = normalizeText(q.question);
              exactSet.add(normQ); 
@@ -492,55 +498,40 @@ export async function GET(req: Request) {
     }
 
     // --- בדיקת חוסרים (Refill) ---
-    // הערה: משאירים את הלוגיקה, אך אם היא תיכשל בגלל 429, ה-Cron ימשיך עם מה שיש.
     const missingEasy = targetEasy - countEasy;
     const missingMedium = targetMedium - countMedium;
     const missingHard = targetHard - countHard;
     const totalMissing = missingEasy + missingMedium + missingHard;
 
     if (totalMissing > 0) {
-        console.log(`[Cron] Missing ${totalMissing} questions (E:${missingEasy}, M:${missingMedium}, H:${missingHard}). Triggering REFILL.`);
+        console.log(`[Cron] Missing ${totalMissing}. Triggering REFILL.`);
         
         const refillPrompt = `
-           אני צריך השלמה של ${totalMissing} שאלות טריוויה נוספות בדיוק.
-           הקפד לא לחזור על שאלות קודמות.
-           
-           הכמות החסרה לפי קושי:
-           - Easy: ${missingEasy}
-           - Medium: ${missingMedium}
-           - Hard: ${missingHard}
-           
-           החזר JSON בלבד.
+            אני צריך השלמה של ${totalMissing} שאלות טריוויה נוספות בדיוק.
+            הקפד לא לחזור על שאלות קודמות.
+            
+            הכמות החסרה לפי קושי:
+            - Easy: ${missingEasy}
+            - Medium: ${missingMedium}
+            - Hard: ${missingHard}
+            
+            החזר JSON בלבד.
         `;
 
         try {
-             // השהייה נוספת קטנה
-             await new Promise(resolve => setTimeout(resolve, 2000));
-             
-             const refillRes = await fetchWithRetry(
-                `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        contents: [{ parts: [{ text: refillPrompt }] }],
-                        generationConfig: { responseMimeType: "application/json" }
-                    }),
-                }, 1
-            );
-            const refillData = await refillRes.json();
-            const refillRaw = JSON.parse(refillData.candidates[0].content.parts[0].text);
-            const refillValid = validateAndFixQuestions(refillRaw);
+             await new Promise(resolve => setTimeout(resolve, 1000));
+             const text = await generateWithRotation(refillPrompt, true);
+             const refillRaw = JSON.parse(text);
+             const refillValid = validateAndFixQuestions(refillRaw);
 
-            // הוספת ההשלמות (כאן מוותרים על בדיקה סמנטית כבדה כדי לא לחרוג מזמן, מסתפקים ב-Exact)
-            for (const q of refillValid) {
+             for (const q of refillValid) {
                 const normQ = normalizeText(q.question);
                 if (exactSet.has(normQ)) continue;
 
                 if (q.difficulty === 'easy' && countEasy < targetEasy) { finalBatch.push(q); countEasy++; }
                 else if (q.difficulty === 'medium' && countMedium < targetMedium) { finalBatch.push(q); countMedium++; }
                 else if (q.difficulty === 'hard' && countHard < targetHard) { finalBatch.push(q); countHard++; }
-            }
+             }
 
         } catch (e) {
             console.warn('[Cron] Refill failed. Proceeding with what we have.', e);
@@ -549,17 +540,13 @@ export async function GET(req: Request) {
 
     // --- שמירה ב-DB ---
     const updatedQuestions = [...currentQuestions, ...finalBatch];
-    
-    // קביעת זמן הריצה הבא: עכשיו + 15 דקות.
-    // מכיוון שהקרון רץ כל 10 דקות, זה יגרום לו "לדלג" על הפעם הבאה, וייתן ל-API כ-20 דקות מנוחה.
     const nextRunTime = new Date(now.getTime() + BATCH_WAIT_MINUTES * 60000);
 
     const updatePayload: any = {
       questions: updatedQuestions,
       current_batch: nextBatchNum,
-      // אכיפה של ההמתנה גם אם הנגלה הנוכחית קצרה
       next_batch_at: nextBatchNum < 2 ? nextRunTime.toISOString() : now.toISOString(),
-      last_log: `Batch ${nextBatchNum}: Added ${finalBatch.length} unique questions.`
+      last_log: `Batch ${nextBatchNum}: Added ${finalBatch.length} unique questions. Keys used: ${API_KEYS.length}`
     };
 
     if (nextBatchNum === 2 || updatedQuestions.length >= TOTAL_TARGET_QUESTIONS) {
